@@ -355,5 +355,31 @@ export const SCENE = {
     resolutionScale: 0.75,
     /** Fraction of instances kept when the second downgrade step fires. */
     populationScale: 0.8,
+    /** fps at/above which sustained good performance starts counting toward recovery (SPEC §6.7.2). */
+    recoverFps: 52,
+    /** Seconds of sustained good fps before a step recovers — longer than `sampleWindow` so quality doesn't oscillate. */
+    recoverWindow: 8,
+    /** Power-save mode's own resolution ceiling and (lower, intentional) fps threshold (SPEC §6.7.2, F9). */
+    powerSave: { resolutionScale: 0.6, minFps: 24 },
   },
 } as const;
+
+/** Pure step→scale mapping for the adaptive-quality state machine (SPEC §6.7.2, N2). Only the FPS sampling that drives `downgradeStep` lives in `main.ts`. */
+export function computeQualityScales(
+  downgradeStep: 0 | 1 | 2,
+  powerSave: boolean,
+): { resolutionScale: number; populationScale: number } {
+  const stepResolutionScale = downgradeStep >= 1 ? SCENE.quality.resolutionScale : 1;
+  const populationScale = downgradeStep >= 2 ? SCENE.quality.populationScale : 1;
+  return {
+    resolutionScale: powerSave
+      ? Math.min(stepResolutionScale, SCENE.quality.powerSave.resolutionScale)
+      : stepResolutionScale,
+    populationScale,
+  };
+}
+
+/** Effective low-fps downgrade threshold — power-save mode's intentional low fps must not read as a fault (SPEC §6.7.2, AC-13). */
+export function effectiveMinFps(powerSave: boolean): number {
+  return powerSave ? SCENE.quality.powerSave.minFps : SCENE.quality.minFps;
+}
