@@ -244,6 +244,34 @@ export function createUi(root: HTMLElement, options: CreateUiOptions = {}): Aqua
   let settingsButton: HTMLButtonElement | null = null;
   let onSettingsToggle: (() => void) | null = null;
 
+  // Idle auto-hide (SPEC §6.8): fade the title/controls out after a stretch of no
+  // input so long-duration viewing stays uninterrupted; any activity brings them
+  // back immediately. Declared here — above the settingsButton/onSettingsToggle
+  // block below — so `onSettingsToggle` can call `onActivity()` without a
+  // temporal-dead-zone error.
+  const IDLE_HIDE_MS = 6000;
+  let idleTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const scheduleIdleHide = (): void => {
+    if (idleTimer !== null) clearTimeout(idleTimer);
+    idleTimer = window.setTimeout(() => {
+      if (settingsPanel?.classList.contains("is-open")) {
+        scheduleIdleHide(); // panel's still open — check again later instead of hiding under it
+        return;
+      }
+      root.classList.add("is-idle");
+    }, IDLE_HIDE_MS);
+  };
+
+  const onActivity = (): void => {
+    root.classList.remove("is-idle");
+    scheduleIdleHide();
+  };
+
+  const ACTIVITY_EVENTS = ["pointerdown", "pointermove", "touchstart", "keydown"] as const;
+  for (const type of ACTIVITY_EVENTS) window.addEventListener(type, onActivity, { passive: true });
+  scheduleIdleHide();
+
   if (settingsPanel !== null) {
     settingsButton = document.createElement("button");
     settingsButton.type = "button";
@@ -257,6 +285,7 @@ export function createUi(root: HTMLElement, options: CreateUiOptions = {}): Aqua
       const open = settingsPanel.classList.toggle("is-open");
       settingsButton?.setAttribute("aria-expanded", open ? "true" : "false");
       settingsButton?.setAttribute("aria-label", open ? "설정 닫기" : "설정 열기");
+      onActivity();
     };
     settingsButton.addEventListener("click", onSettingsToggle);
     controls.append(settingsButton);
@@ -276,6 +305,8 @@ export function createUi(root: HTMLElement, options: CreateUiOptions = {}): Aqua
       audio.setVolume(volume);
     },
     dispose(): void {
+      if (idleTimer !== null) clearTimeout(idleTimer);
+      for (const type of ACTIVITY_EVENTS) window.removeEventListener(type, onActivity);
       soundButton.removeEventListener("click", onToggle);
       if (settingsButton !== null && onSettingsToggle !== null) {
         settingsButton.removeEventListener("click", onSettingsToggle);

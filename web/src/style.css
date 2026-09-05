@@ -299,3 +299,15 @@ body {
     animation-duration: 3.2s;
   }
 }
+
+/* Idle fade: hide title/controls after inactivity for uninterrupted viewing (SPEC §6.8). */
+.overlay.is-idle .title,
+.overlay.is-idle .controls {
+  opacity: 0;
+  transition: opacity 1.2s var(--aq-ease);
+}
+
+.overlay.is-idle .controls,
+.overlay.is-idle .controls * {
+  pointer-events: none;
+}
