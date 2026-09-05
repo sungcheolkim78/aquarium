@@ -181,7 +181,8 @@ function boot(): void {
   };
 
   const frame = (): void => {
-    const dt = Math.min(clock.getDelta(), 0.05);
+    const rawDt = clock.getDelta();
+    const dt = Math.min(rawDt, 0.05);
     elapsed += dt;
 
     const angle = Math.sin(elapsed * SCENE.camera.driftSpeed) * SCENE.camera.driftRadians;
@@ -208,7 +209,7 @@ function boot(): void {
       ui.finishLoading();
     }
 
-    sampleTime += dt;
+    sampleTime += rawDt;
     sampleFrames += 1;
     if (sampleTime >= 1) {
       const fps = sampleFrames / sampleTime;
