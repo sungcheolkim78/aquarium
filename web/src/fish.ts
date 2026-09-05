@@ -188,6 +188,7 @@ const SEPARATION_RADIUS = 0.95;
 const CONTAIN = 1.8;
 const WANDER = 0.55;
 const TERRITORY = 2.0;
+const DEPTH_BIAS = 0.12;
 
 /** One species' school: geometry, instanced mesh, and its steering update. */
 export class FishSchool {
@@ -276,7 +277,7 @@ transformed.z += swayWave * swayWeight * swayWeight * ${(species.shape.length * 
       this.writeMatrices();
       return;
     }
-    const { speed, schooling, territoryStrength } = this.species.behavior;
+    const { speed, schooling, territoryStrength, depthPreference } = this.species.behavior;
     const active = this.mesh.count;
     const school = this.boids.slice(0, active);
     if (schooling) computeCentroid(school, this.centroid);
@@ -335,6 +336,11 @@ transformed.z += swayWave * swayWeight * swayWeight * ${(species.shape.length * 
           SCENE.coral.avoidanceRadius,
           this.scratch,
         ).multiplyScalar(CONTAIN),
+      );
+
+      this.steer.add(
+        depthBiasSteer(boid.position.y, depthPreference ?? 0.5, SCENE.bounds, SCENE.floorY, this.scratch)
+          .multiplyScalar(DEPTH_BIAS),
       );
 
       boid.velocity.addScaledVector(this.steer, dt);

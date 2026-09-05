@@ -844,4 +844,35 @@ describe("FishSchool", () => {
     withCluster.dispose();
     withoutCluster.dispose();
   });
+
+  it("trends individuals toward their species' preferred depth band (§4.3 activity depth)", () => {
+    // Isolate depth bias from the pre-existing floor/ceiling containment
+    // margin: start both schools safely mid-tank (away from either margin)
+    // and compare a surface-leaning vs a floor-leaning depthPreference: only
+    // the depth-bias term can explain a difference between them.
+    const shark = FISH_REGISTRY.find((species) => species.id === "great-white-shark") as FishSpecies;
+    const surfaceLeaning: FishSpecies = { ...shark, behavior: { ...shark.behavior, depthPreference: 0.9 } };
+    const floorLeaning: FishSpecies = { ...shark, behavior: { ...shark.behavior, depthPreference: 0.1 } };
+    const surfaceSchool = new FishSchool(surfaceLeaning, createRng(9));
+    const floorSchool = new FishSchool(floorLeaning, createRng(9));
+
+    const midY = SCENE.floorY + SCENE.bounds.y;
+    for (const boid of (surfaceSchool as unknown as { boids: Boid[] }).boids) boid.position.y = midY;
+    for (const boid of (floorSchool as unknown as { boids: Boid[] }).boids) boid.position.y = midY;
+
+    for (let step = 0; step < 900; step += 1) {
+      surfaceSchool.update(1 / 60, step / 60);
+      floorSchool.update(1 / 60, step / 60);
+    }
+
+    const averageY = (school: FishSchool): number => {
+      const matrix = school.mesh.instanceMatrix.array;
+      let sum = 0;
+      for (let i = 0; i < school.mesh.count; i += 1) sum += matrix[i * 16 + 13] ?? 0;
+      return sum / school.mesh.count;
+    };
+    expect(averageY(surfaceSchool)).toBeGreaterThan(averageY(floorSchool));
+    surfaceSchool.dispose();
+    floorSchool.dispose();
+  });
 });
