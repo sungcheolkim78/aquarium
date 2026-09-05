@@ -187,27 +187,35 @@ export function createUi(root: HTMLElement, options: CreateUiOptions = {}): Aqua
   soundButton.setAttribute("aria-pressed", "false");
   soundButton.title = "앰비언트 사운드";
 
+  let predictedPlaying = audio.isPlaying;
+  let toggleQueue: Promise<void> = Promise.resolve();
+
+  const applySoundButtonState = (playing: boolean): void => {
+    soundButton.innerHTML = playing ? SPEAKER_ON : SPEAKER_OFF;
+    soundButton.classList.toggle("is-on", playing);
+    soundButton.setAttribute("aria-pressed", playing ? "true" : "false");
+    soundButton.setAttribute(
+      "aria-label",
+      playing ? "앰비언트 사운드 끄기" : "앰비언트 사운드 켜기",
+    );
+  };
+
   const onToggle = (): void => {
-    soundButton.disabled = true;
-    audio
-      .toggle()
+    predictedPlaying = !predictedPlaying;
+    applySoundButtonState(predictedPlaying);
+
+    toggleQueue = toggleQueue
+      .then(() => audio.toggle())
       .then((playing) => {
-        soundButton.innerHTML = playing ? SPEAKER_ON : SPEAKER_OFF;
-        soundButton.classList.toggle("is-on", playing);
-        soundButton.setAttribute("aria-pressed", playing ? "true" : "false");
-        soundButton.setAttribute(
-          "aria-label",
-          playing ? "앰비언트 사운드 끄기" : "앰비언트 사운드 켜기",
-        );
+        predictedPlaying = playing;
+        applySoundButtonState(playing);
       })
       .catch(() => {
+        predictedPlaying = false;
         soundButton.innerHTML = SPEAKER_OFF;
         soundButton.classList.remove("is-on");
         soundButton.setAttribute("aria-pressed", "false");
         soundButton.setAttribute("aria-label", "앰비언트 사운드를 사용할 수 없습니다");
-      })
-      .finally(() => {
-        soundButton.disabled = false;
       });
   };
   soundButton.addEventListener("click", onToggle);

@@ -220,7 +220,7 @@ function boot(): void {
       ui.finishLoading();
     }
 
-    sampleTime += rawDt;
+    sampleTime += Math.min(rawDt, 1);
     sampleFrames += 1;
     if (sampleTime >= 1) {
       const fps = sampleFrames / sampleTime;
@@ -250,12 +250,15 @@ function boot(): void {
   };
   document.addEventListener("visibilitychange", onVisibilityChange);
 
+  let disposed = false;
+
   window.addEventListener("pagehide", (event) => {
     renderer.setAnimationLoop(null);
     rebuildFishDetail.cancel();
     rebuildFishCount.cancel();
     rebuildBackground.cancel();
     if (event.persisted) return; // may return via `pageshow` from the bfcache — keep GPU resources alive
+    disposed = true;
     window.removeEventListener("resize", onResize);
     document.removeEventListener("visibilitychange", onVisibilityChange);
     for (const school of schools) school.dispose();
@@ -267,11 +270,13 @@ function boot(): void {
   });
 
   window.addEventListener("pageshow", (event) => {
-    if (!event.persisted) return;
+    if (!event.persisted || disposed) return;
+    onResize(); // viewport may have changed while frozen in the cache
     clock.getDelta(); // discard the time spent frozen in the cache
     sampleTime = 0;
     sampleFrames = 0;
     lowFpsTime = 0;
+    if (document.hidden) return; // restored into a background tab — stay stopped (SPEC N2)
     renderer.setAnimationLoop(frame);
   });
 }
