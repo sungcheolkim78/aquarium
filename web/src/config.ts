@@ -279,6 +279,49 @@ export const DEFAULT_SETTINGS: AquariumSettings = {
   audio: { volume: 0.16 },
 };
 
+/** Stage-B mood preset identifiers (SPEC §6.6). */
+export type PresetId = "clear-reef" | "calm-sea" | "soft-evening";
+
+/** The exact field values one mood preset dials in — deliberately only fields the settings panel already exposes (SPEC §6.6). */
+export interface MoodPreset {
+  readonly label: string;
+  readonly lightingIntensityScale: number;
+  readonly fishCountScale: number;
+  readonly bubblesEnabled: boolean;
+  readonly bubblesDensityScale: number;
+}
+
+/**
+ * Mood presets (SPEC §6.6, F8). Deliberately exclude `fish.detail` /
+ * `background.detail` / `fish.enabledSpecies` — device-performance and
+ * species-selection settings must stay independent of mood. `calm-sea`
+ * mirrors `DEFAULT_SETTINGS` exactly so an untouched first visit already
+ * matches a preset.
+ */
+export const MOOD_PRESETS: Record<PresetId, MoodPreset> = {
+  "clear-reef": {
+    label: "맑은 산호초",
+    lightingIntensityScale: 1.3,
+    fishCountScale: 1.2,
+    bubblesEnabled: true,
+    bubblesDensityScale: 1.2,
+  },
+  "calm-sea": {
+    label: "고요한 바다",
+    lightingIntensityScale: 1,
+    fishCountScale: 1,
+    bubblesEnabled: true,
+    bubblesDensityScale: 1,
+  },
+  "soft-evening": {
+    label: "은은한 저녁",
+    lightingIntensityScale: 0.6,
+    fishCountScale: 0.7,
+    bubblesEnabled: true,
+    bubblesDensityScale: 0.5,
+  },
+};
+
 /** Scene-wide tuning tokens (palette mirrored in `style.css`). */
 export const SCENE = {
   /** Exponential-squared fog: the sense of depth (SPEC §6.3). */

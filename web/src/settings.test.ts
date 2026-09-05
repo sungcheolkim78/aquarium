@@ -5,13 +5,21 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { DEFAULT_SETTINGS, FISH_REGISTRY, SETTINGS_LIMITS, type AquariumSettings } from "./config";
+import {
+  DEFAULT_SETTINGS,
+  FISH_REGISTRY,
+  MOOD_PRESETS,
+  SETTINGS_LIMITS,
+  type AquariumSettings,
+  type PresetId,
+} from "./config";
 import {
   MAX_SETTINGS,
   debounce,
   estimateTriangleBudget,
   getLocalStorage,
   loadSettings,
+  matchingPresetId,
   saveSettings,
   sanitizeSettings,
   withBackgroundObjectCountScale,
@@ -20,7 +28,9 @@ import {
   withCaustics,
   withFishCountScale,
   withFishDetail,
+  withLightingIntensityScale,
   withPowerSave,
+  withPreset,
   withSpeciesEnabled,
   withVolume,
 } from "./settings";
@@ -268,5 +278,50 @@ describe("sanitizeSettings for camera/performance/audio (SPEC §6.5.2 v1.2)", ()
     expect(sanitized?.camera.mode).toBe("fixed");
     expect(sanitized?.performance.powerSave).toBe(true);
     expect(sanitized?.audio.volume).toBe(0.5);
+  });
+});
+
+describe("withPreset / matchingPresetId (SPEC §6.6)", () => {
+  it("withPreset sets lighting/fish-count/bubbles from the preset and leaves detail/species untouched", () => {
+    const next = withPreset(DEFAULT_SETTINGS, "soft-evening");
+    const preset = MOOD_PRESETS["soft-evening"];
+    expect(next.lighting.intensityScale).toBe(preset.lightingIntensityScale);
+    expect(next.fish.countScale).toBe(preset.fishCountScale);
+    expect(next.bubbles.enabled).toBe(preset.bubblesEnabled);
+    expect(next.bubbles.densityScale).toBe(preset.bubblesDensityScale);
+    expect(next.fish.detail).toBe(DEFAULT_SETTINGS.fish.detail);
+    expect(next.background).toEqual(DEFAULT_SETTINGS.background);
+    expect(next.fish.enabledSpecies).toEqual(DEFAULT_SETTINGS.fish.enabledSpecies);
+  });
+
+  it("every preset's numeric values stay inside SETTINGS_LIMITS", () => {
+    for (const id of Object.keys(MOOD_PRESETS) as PresetId[]) {
+      const preset = MOOD_PRESETS[id];
+      expect(preset.lightingIntensityScale).toBeGreaterThanOrEqual(SETTINGS_LIMITS.lighting.intensityScale.min);
+      expect(preset.lightingIntensityScale).toBeLessThanOrEqual(SETTINGS_LIMITS.lighting.intensityScale.max);
+      expect(preset.fishCountScale).toBeGreaterThanOrEqual(SETTINGS_LIMITS.fish.countScale.min);
+      expect(preset.fishCountScale).toBeLessThanOrEqual(SETTINGS_LIMITS.fish.countScale.max);
+      expect(preset.bubblesDensityScale).toBeGreaterThanOrEqual(SETTINGS_LIMITS.bubbles.densityScale.min);
+      expect(preset.bubblesDensityScale).toBeLessThanOrEqual(SETTINGS_LIMITS.bubbles.densityScale.max);
+    }
+  });
+
+  it("matchingPresetId finds calm-sea for DEFAULT_SETTINGS (unmodified first visit)", () => {
+    expect(matchingPresetId(DEFAULT_SETTINGS)).toBe("calm-sea");
+  });
+
+  it("matchingPresetId returns the applied preset right after withPreset", () => {
+    expect(matchingPresetId(withPreset(DEFAULT_SETTINGS, "clear-reef"))).toBe("clear-reef");
+  });
+
+  it("matchingPresetId returns null after a manual tweak breaks the match", () => {
+    const custom = withLightingIntensityScale(withPreset(DEFAULT_SETTINGS, "clear-reef"), 0.5);
+    expect(matchingPresetId(custom)).toBeNull();
+  });
+
+  it("rapid successive preset picks converge to the last one applied (AC-10-style)", () => {
+    const sequence: PresetId[] = ["clear-reef", "soft-evening", "calm-sea"];
+    const final = sequence.reduce((acc: AquariumSettings, id) => withPreset(acc, id), DEFAULT_SETTINGS);
+    expect(matchingPresetId(final)).toBe("calm-sea");
   });
 });

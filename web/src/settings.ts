@@ -8,10 +8,12 @@ import {
   BACKGROUND_DETAIL_PROFILES,
   DEFAULT_SETTINGS,
   FISH_REGISTRY,
+  MOOD_PRESETS,
   SETTINGS_LIMITS,
   type AquariumSettings,
   type DetailLevel,
   type FishSpecies,
+  type PresetId,
 } from "./config";
 import type { Material } from "three";
 
@@ -323,6 +325,36 @@ export function withVolume(settings: AquariumSettings, volume: number): Aquarium
       volume: clampNumber(volume, SETTINGS_LIMITS.audio.volume.min, SETTINGS_LIMITS.audio.volume.max, settings.audio.volume),
     },
   };
+}
+
+export function withPreset(settings: AquariumSettings, presetId: PresetId): AquariumSettings {
+  const preset = MOOD_PRESETS[presetId];
+  return {
+    ...settings,
+    lighting: { ...settings.lighting, intensityScale: preset.lightingIntensityScale },
+    fish: { ...settings.fish, countScale: preset.fishCountScale },
+    bubbles: {
+      ...settings.bubbles,
+      enabled: preset.bubblesEnabled,
+      densityScale: preset.bubblesDensityScale,
+    },
+  };
+}
+
+/** Which mood preset (if any) the current settings exactly match — a derived UI hint, never persisted (SPEC §6.6). */
+export function matchingPresetId(settings: AquariumSettings): PresetId | null {
+  for (const id of Object.keys(MOOD_PRESETS) as PresetId[]) {
+    const preset = MOOD_PRESETS[id];
+    if (
+      settings.lighting.intensityScale === preset.lightingIntensityScale &&
+      settings.fish.countScale === preset.fishCountScale &&
+      settings.bubbles.enabled === preset.bubblesEnabled &&
+      settings.bubbles.densityScale === preset.bubblesDensityScale
+    ) {
+      return id;
+    }
+  }
+  return null;
 }
 
 /** The most demanding combination reachable from the settings panel (SPEC §6.5.6, AC-7). */
