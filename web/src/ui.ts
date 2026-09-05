@@ -32,9 +32,20 @@ class AmbientAudio {
   private lfo: OscillatorNode | null = null;
   private playing = false;
   private stopTimer: ReturnType<typeof setTimeout> | null = null;
+  private targetVolume = 0.16;
 
   get isPlaying(): boolean {
     return this.playing;
+  }
+
+  /** Live volume control (SPEC §6.7.3): re-targets the current fade-in level if already playing, and becomes the ramp target for the next `start()` either way. */
+  setVolume(volume: number): void {
+    this.targetVolume = volume;
+    if (!this.playing || this.context === null || this.gain === null) return;
+    const now = this.context.currentTime;
+    this.gain.gain.cancelScheduledValues(now);
+    this.gain.gain.setValueAtTime(this.gain.gain.value, now);
+    this.gain.gain.linearRampToValueAtTime(volume, now + 0.2);
   }
 
   /** Must be called from a user gesture. Returns the new playing state. */
@@ -63,7 +74,7 @@ class AmbientAudio {
     const now = context.currentTime;
     gain.gain.cancelScheduledValues(now);
     gain.gain.setValueAtTime(gain.gain.value, now);
-    gain.gain.linearRampToValueAtTime(0.16, now + 2.5);
+    gain.gain.linearRampToValueAtTime(this.targetVolume, now + 2.5);
     this.playing = true;
   }
 
@@ -152,12 +163,16 @@ class AmbientAudio {
 export interface AquariumUi {
   /** Fade the loading indicator out once the first frame has rendered. */
   finishLoading(): void;
+  /** Update the ambient sound's target volume (SPEC §6.7.3). */
+  setVolume(volume: number): void;
   dispose(): void;
 }
 
 export interface CreateUiOptions {
   /** The settings panel's root element (SPEC F6, §6.5.1); the gear button toggles its visibility. */
   readonly settingsPanel?: HTMLElement;
+  /** Initial ambient-sound target volume, 0~1 (SPEC §6.7.3). Defaults to `AmbientAudio`'s own 0.16 if omitted. */
+  readonly initialVolume?: number;
 }
 
 /** Build the overlay UI inside `root`. */
@@ -179,6 +194,7 @@ export function createUi(root: HTMLElement, options: CreateUiOptions = {}): Aqua
   title.textContent = "고요한 아쿠아리움";
 
   const audio = new AmbientAudio();
+  if (options.initialVolume !== undefined) audio.setVolume(options.initialVolume);
   const soundButton = document.createElement("button");
   soundButton.type = "button";
   soundButton.className = "sound-toggle";
@@ -255,6 +271,9 @@ export function createUi(root: HTMLElement, options: CreateUiOptions = {}): Aqua
       loader.classList.add("is-hidden");
       root.classList.add("is-ready");
       window.setTimeout(() => loader.remove(), 900);
+    },
+    setVolume(volume: number): void {
+      audio.setVolume(volume);
     },
     dispose(): void {
       soundButton.removeEventListener("click", onToggle);
