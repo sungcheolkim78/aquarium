@@ -31,6 +31,7 @@ class AmbientAudio {
   private source: AudioBufferSourceNode | null = null;
   private lfo: OscillatorNode | null = null;
   private playing = false;
+  private stopTimer: ReturnType<typeof setTimeout> | null = null;
 
   get isPlaying(): boolean {
     return this.playing;
@@ -47,6 +48,10 @@ class AmbientAudio {
   }
 
   private async start(): Promise<void> {
+    if (this.stopTimer !== null) {
+      clearTimeout(this.stopTimer);
+      this.stopTimer = null;
+    }
     const context = this.context ?? new AudioContext();
     this.context = context;
     if (context.state === "suspended") await context.resume();
@@ -71,7 +76,16 @@ class AmbientAudio {
     const now = context.currentTime;
     gain.gain.cancelScheduledValues(now);
     gain.gain.setValueAtTime(gain.gain.value, now);
-    gain.gain.linearRampToValueAtTime(0, now + 1.2);
+    const fadeSeconds = 1.2;
+    gain.gain.linearRampToValueAtTime(0, now + fadeSeconds);
+
+    await new Promise<void>((resolve) => {
+      this.stopTimer = setTimeout(() => {
+        this.stopTimer = null;
+        resolve();
+      }, fadeSeconds * 1000);
+    });
+    if (this.playing) return; // `start()` ran again during the fade — stay playing, don't suspend
     await context.suspend();
   }
 
@@ -121,6 +135,8 @@ class AmbientAudio {
   }
 
   dispose(): void {
+    if (this.stopTimer !== null) clearTimeout(this.stopTimer);
+    this.stopTimer = null;
     this.source?.stop();
     this.lfo?.stop();
     void this.context?.close();
