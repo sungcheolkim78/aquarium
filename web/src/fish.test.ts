@@ -10,12 +10,16 @@ import { FISH_REGISTRY, SCENE, totalFishCount, type FishSpecies } from "./config
 import {
   buildFishGeometry,
   buildCreatureGeometry,
+  clampTurnRate,
   computeCentroid,
   computeFacetJitter,
   containSteer,
+  coralAvoidanceSteer,
   createRng,
   createSchools,
+  depthBiasSteer,
   FishSchool,
+  rhythmSpeedScale,
   type Boid,
 } from "./fish";
 import {
@@ -561,6 +565,71 @@ describe("containSteer", () => {
     expect(containSteer(new Vector3(0, floorY + 4, -bounds.z), bounds, floorY).z).toBeGreaterThan(0);
     expect(containSteer(new Vector3(0, floorY, 0), bounds, floorY).y).toBeGreaterThan(0);
     expect(containSteer(new Vector3(0, floorY + bounds.y * 2, 0), bounds, floorY).y).toBeLessThan(0);
+  });
+});
+
+describe("depthBiasSteer", () => {
+  const bounds = SCENE.bounds;
+  const floorY = SCENE.floorY;
+
+  it("pulls up when below the preferred depth and down when above it", () => {
+    const target = floorY + 0.5 * bounds.y * 2;
+    expect(depthBiasSteer(floorY, 0.5, bounds, floorY).y).toBeGreaterThan(0);
+    expect(depthBiasSteer(target + 5, 0.5, bounds, floorY).y).toBeLessThan(0);
+  });
+
+  it("is exactly zero at the preferred depth", () => {
+    const target = floorY + 0.5 * bounds.y * 2;
+    expect(depthBiasSteer(target, 0.5, bounds, floorY).y).toBeCloseTo(0, 5);
+  });
+});
+
+describe("clampTurnRate", () => {
+  it("returns the desired direction unchanged when within the turn budget", () => {
+    const current = new Vector3(1, 0, 0);
+    const desired = new Vector3(1, 0, 0.05).normalize();
+    const result = clampTurnRate(current, desired, 0.5);
+    expect(result.x).toBeCloseTo(desired.x, 3);
+    expect(result.z).toBeCloseTo(desired.z, 3);
+  });
+
+  it("rotates only partway toward a desired direction outside the turn budget", () => {
+    const current = new Vector3(1, 0, 0);
+    const desired = new Vector3(-1, 0, 0);
+    const maxRadians = 0.2;
+    const result = clampTurnRate(current, desired, maxRadians);
+    const angleFromCurrent = current.angleTo(result);
+    expect(angleFromCurrent).toBeCloseTo(maxRadians, 2);
+    expect(result.length()).toBeCloseTo(1, 5);
+  });
+});
+
+describe("rhythmSpeedScale", () => {
+  it("returns exactly 1 when amplitude is 0", () => {
+    for (let t = 0; t < 3; t += 0.37) expect(rhythmSpeedScale(t, 0, 0, 0.5)).toBe(1);
+  });
+
+  it("stays within [1-amplitude, 1] and actually varies over time", () => {
+    const values = Array.from({ length: 20 }, (_, i) => rhythmSpeedScale(i * 0.1, 0, 0.3, 0.5));
+    for (const v of values) {
+      expect(v).toBeGreaterThanOrEqual(0.7 - 1e-9);
+      expect(v).toBeLessThanOrEqual(1);
+    }
+    expect(Math.max(...values) - Math.min(...values)).toBeGreaterThan(0.1);
+  });
+});
+
+describe("coralAvoidanceSteer", () => {
+  it("is zero far from every cluster", () => {
+    const steer = coralAvoidanceSteer(new Vector3(50, 0, 50), [new Vector3(0, 0, 0)], 0, 2);
+    expect(steer.lengthSq()).toBe(0);
+  });
+
+  it("points away from the nearest cluster when inside its radius", () => {
+    const center = new Vector3(0, 0, 0);
+    const steer = coralAvoidanceSteer(new Vector3(1, 0, 0), [center], 0, 2);
+    expect(steer.x).toBeGreaterThan(0);
+    expect(steer.z).toBeCloseTo(0, 5);
   });
 });
 

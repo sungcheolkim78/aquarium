@@ -107,6 +107,79 @@ export function containSteer(
   return out;
 }
 
+/** Weak vertical pull toward a preferred depth band (0=floor..1=surface); zero exactly at the target. */
+export function depthBiasSteer(
+  positionY: number,
+  depthPreference: number,
+  bounds: { readonly y: number },
+  floorY: number,
+  out = new Vector3(),
+): Vector3 {
+  out.set(0, 0, 0);
+  const targetY = floorY + depthPreference * bounds.y * 2;
+  out.y = targetY - positionY;
+  return out;
+}
+
+const clampTurnRateAxis = new Vector3();
+
+/** Rotates `current` (unit vector) toward `desired` (unit vector) by at most `maxRadians`. */
+export function clampTurnRate(
+  current: Vector3,
+  desired: Vector3,
+  maxRadians: number,
+  out = new Vector3(),
+): Vector3 {
+  const dot = Math.min(1, Math.max(-1, current.dot(desired)));
+  const angle = Math.acos(dot);
+  if (angle <= maxRadians || angle < 1e-6) return out.copy(desired);
+
+  clampTurnRateAxis.crossVectors(current, desired);
+  if (clampTurnRateAxis.lengthSq() < 1e-10) {
+    // `current` and `desired` point in exactly opposite directions: any axis
+    // perpendicular to `current` is an equally valid rotation axis.
+    clampTurnRateAxis.set(0, 1, 0);
+    if (Math.abs(current.y) > 0.99) clampTurnRateAxis.set(1, 0, 0);
+    clampTurnRateAxis.cross(current);
+  }
+  clampTurnRateAxis.normalize();
+  return out.copy(current).applyAxisAngle(clampTurnRateAxis, maxRadians).normalize();
+}
+
+/** Multiplier on target speed: dips to `1 - amplitude` and back once per `1 / frequency` seconds. */
+export function rhythmSpeedScale(
+  elapsed: number,
+  phase: number,
+  amplitude: number,
+  frequency: number,
+): number {
+  return 1 - amplitude * (0.5 + 0.5 * Math.sin(elapsed * frequency * Math.PI * 2 + phase));
+}
+
+/** Sum of per-cluster push-away; zero outside every cluster's avoidance sphere. */
+export function coralAvoidanceSteer(
+  position: Vector3,
+  clusterCenters: readonly Vector3[],
+  avoidanceCenterY: number,
+  avoidanceRadius: number,
+  out = new Vector3(),
+): Vector3 {
+  out.set(0, 0, 0);
+  for (const center of clusterCenters) {
+    const dx = position.x - center.x;
+    const dy = position.y - avoidanceCenterY;
+    const dz = position.z - center.z;
+    const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    if (dist > 1e-4 && dist < avoidanceRadius) {
+      const push = (avoidanceRadius - dist) / avoidanceRadius / dist;
+      out.x += dx * push;
+      out.y += dy * push;
+      out.z += dz * push;
+    }
+  }
+  return out;
+}
+
 const COHESION = 0.5;
 const SEPARATION = 1.4;
 const SEPARATION_RADIUS = 0.95;
