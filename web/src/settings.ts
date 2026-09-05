@@ -28,6 +28,20 @@ function disposeMaterial(material: Material | Material[]): void {
 
 const STORAGE_KEY = "aquarium:settings";
 
+/**
+ * Safely access `window.localStorage`. In some environments (private
+ * browsing in older Safari, sandboxed iframes, non-browser test runners)
+ * the `localStorage` property getter itself throws, before any call
+ * reaches `loadSettings`/`saveSettings`'s own try/catch.
+ */
+export function getLocalStorage(): Storage | undefined {
+  try {
+    return window.localStorage;
+  } catch {
+    return undefined;
+  }
+}
+
 function clampNumber(value: unknown, min: number, max: number, fallback: number): number {
   const n = typeof value === "number" && Number.isFinite(value) ? value : fallback;
   return Math.min(max, Math.max(min, n));
@@ -117,7 +131,8 @@ export function sanitizeSettings(
 }
 
 /** Read persisted settings, falling back to `DEFAULT_SETTINGS` on any problem (N5, AC-6). */
-export function loadSettings(storage: Pick<Storage, "getItem">): AquariumSettings {
+export function loadSettings(storage: Pick<Storage, "getItem"> | undefined): AquariumSettings {
+  if (storage === undefined) return DEFAULT_SETTINGS;
   try {
     const raw = storage.getItem(STORAGE_KEY);
     if (raw === null) return DEFAULT_SETTINGS;
@@ -128,7 +143,8 @@ export function loadSettings(storage: Pick<Storage, "getItem">): AquariumSetting
 }
 
 /** Persist settings (N5). Silently no-ops if storage is unavailable (quota/private mode). */
-export function saveSettings(settings: AquariumSettings, storage: Pick<Storage, "setItem">): void {
+export function saveSettings(settings: AquariumSettings, storage: Pick<Storage, "setItem"> | undefined): void {
+  if (storage === undefined) return;
   try {
     storage.setItem(STORAGE_KEY, JSON.stringify(settings));
   } catch {

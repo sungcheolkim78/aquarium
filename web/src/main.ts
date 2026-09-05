@@ -11,7 +11,7 @@ import { FISH_REGISTRY, SCENE, type AquariumSettings } from "./config";
 import { createEnvironment } from "./environment";
 import { createRng, createSchools, type FishSchool } from "./fish";
 import { createBubbles } from "./particles";
-import { debounce, loadSettings, saveSettings } from "./settings";
+import { debounce, getLocalStorage, loadSettings, saveSettings } from "./settings";
 import { createSettingsPanel } from "./settingsPanel";
 import { createUi } from "./ui";
 
@@ -38,7 +38,7 @@ function boot(): void {
     throw new Error("aquarium: #scene canvas or #overlay container is missing");
   }
 
-  let settings: AquariumSettings = loadSettings(window.localStorage);
+  let settings: AquariumSettings = loadSettings(getLocalStorage());
 
   let renderer: WebGLRenderer;
   try {
@@ -114,7 +114,7 @@ function boot(): void {
     onChange(next: AquariumSettings): void {
       const prev = settings;
       settings = next;
-      saveSettings(next, window.localStorage);
+      saveSettings(next, getLocalStorage());
 
       if (prev.fish.enabledSpecies !== next.fish.enabledSpecies) {
         for (const species of FISH_REGISTRY) {

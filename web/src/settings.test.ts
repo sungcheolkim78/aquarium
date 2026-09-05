@@ -10,6 +10,7 @@ import {
   MAX_SETTINGS,
   debounce,
   estimateTriangleBudget,
+  getLocalStorage,
   loadSettings,
   saveSettings,
   sanitizeSettings,
@@ -177,5 +178,39 @@ describe("estimateTriangleBudget (AC-7)", () => {
     const low = estimateTriangleBudget(DEFAULT_SETTINGS);
     const high = estimateTriangleBudget(MAX_SETTINGS);
     expect(high).toBeGreaterThan(low);
+  });
+});
+
+describe("getLocalStorage", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("returns window.localStorage when accessible", () => {
+    const fakeStorage = { getItem: () => null } as unknown as Storage;
+    vi.stubGlobal("window", { localStorage: fakeStorage });
+    expect(getLocalStorage()).toBe(fakeStorage);
+  });
+
+  it("returns undefined when there is no window global (non-browser environment)", () => {
+    vi.stubGlobal("window", undefined);
+    expect(getLocalStorage()).toBeUndefined();
+  });
+
+  it("returns undefined when the localStorage getter itself throws", () => {
+    vi.stubGlobal("window", {
+      get localStorage(): Storage {
+        throw new DOMException("denied", "SecurityError");
+      },
+    });
+    expect(getLocalStorage()).toBeUndefined();
+  });
+});
+
+describe("loadSettings/saveSettings with unavailable storage", () => {
+  it("loadSettings returns DEFAULT_SETTINGS when storage is undefined", () => {
+    expect(loadSettings(undefined)).toEqual(DEFAULT_SETTINGS);
+  });
+
+  it("saveSettings no-ops without throwing when storage is undefined", () => {
+    expect(() => saveSettings(DEFAULT_SETTINGS, undefined)).not.toThrow();
   });
 });
