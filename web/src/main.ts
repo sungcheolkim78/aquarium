@@ -7,7 +7,7 @@ import "./style.css";
 
 import { Clock, Color, PerspectiveCamera, Scene, Vector3, WebGLRenderer } from "three";
 
-import { FISH_REGISTRY, SCENE, type AquariumSettings } from "./config";
+import { FISH_REGISTRY, SCENE, computeQualityScales, effectiveMinFps, type AquariumSettings } from "./config";
 import { createEnvironment } from "./environment";
 import { createRng, createSchools, type FishSchool } from "./fish";
 import { createBubbles } from "./particles";
@@ -69,10 +69,16 @@ function boot(): void {
     typeof window.matchMedia === "function" &&
     window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-  if (prefersReducedMotion) {
+  const applyFixedCameraPose = (): void => {
     camera.position.set(0, SCENE.camera.height, SCENE.camera.radius);
     camera.lookAt(target);
-  }
+  };
+
+  // A never-customized "drift" default still honours a system reduced-motion
+  // request at boot; an explicit saved choice always wins (SPEC §6.7.1).
+  let cameraMode: AquariumSettings["camera"]["mode"] =
+    settings.camera.mode === "drift" && prefersReducedMotion ? "fixed" : settings.camera.mode;
+  if (cameraMode === "fixed") applyFixedCameraPose();
 
   const rng = createRng(0x5eed_a17c);
   const environment = createEnvironment(scene, rng, {
@@ -150,10 +156,17 @@ function boot(): void {
 
       if (prev.bubbles.enabled !== next.bubbles.enabled) bubbles.setEnabled(next.bubbles.enabled);
       if (prev.bubbles.densityScale !== next.bubbles.densityScale) applyBubbleDensity();
+
+      if (prev.camera.mode !== next.camera.mode) {
+        cameraMode = next.camera.mode;
+        if (cameraMode === "fixed") applyFixedCameraPose();
+      }
+      if (prev.performance.powerSave !== next.performance.powerSave) applyQualityStep();
+      if (prev.audio.volume !== next.audio.volume) ui.setVolume(next.audio.volume);
     },
   });
 
-  const ui = createUi(overlay, { settingsPanel: settingsPanel.element });
+  const ui = createUi(overlay, { settingsPanel: settingsPanel.element, initialVolume: settings.audio.volume });
 
   const onResize = (): void => {
     camera.aspect = window.innerWidth / window.innerHeight;
@@ -167,34 +180,36 @@ function boot(): void {
   let elapsed = 0;
   let firstFrameDone = false;
 
-  // Adaptive quality: resolution first, then population (SPEC N2).
-  let downgradeStep = 0;
+  // Adaptive quality: bidirectional step 0~2, resolution first then
+  // population going down, population first then resolution coming back
+  // (SPEC §6.7.2, N2). `applyQualityStep` is the only place that touches the
+  // renderer/schools/bubbles for this — both directions and power-save just
+  // recompute from `downgradeStep`/`settings.performance.powerSave` via the
+  // pure `computeQualityScales`.
+  let downgradeStep: 0 | 1 | 2 = 0;
   let sampleTime = 0;
   let sampleFrames = 0;
   let lowFpsTime = 0;
+  let goodFpsTime = 0;
 
-  const downgrade = (): void => {
-    downgradeStep += 1;
-    if (downgradeStep === 1) {
-      resolutionScale = SCENE.quality.resolutionScale;
-      renderer.setPixelRatio(basePixelRatio * resolutionScale);
-      renderer.setSize(window.innerWidth, window.innerHeight, false);
-      return;
-    }
-    if (downgradeStep === 2) {
-      qualityPopulationScale = SCENE.quality.populationScale;
-      qualityBubbleScale = 0.6;
-      for (const school of schools) school.setPopulationScale(qualityPopulationScale);
-      applyBubbleDensity();
-    }
+  const applyQualityStep = (): void => {
+    const scales = computeQualityScales(downgradeStep, settings.performance.powerSave);
+    resolutionScale = scales.resolutionScale;
+    renderer.setPixelRatio(basePixelRatio * resolutionScale);
+    renderer.setSize(window.innerWidth, window.innerHeight, false);
+    qualityPopulationScale = scales.populationScale;
+    qualityBubbleScale = downgradeStep >= 2 ? 0.6 : 1;
+    for (const school of schools) school.setPopulationScale(qualityPopulationScale);
+    applyBubbleDensity();
   };
+  applyQualityStep(); // applies power-save's resolution ceiling immediately, even before any downgrade
 
   const frame = (): void => {
     const rawDt = clock.getDelta();
     const dt = Math.min(rawDt, 0.05);
     elapsed += dt;
 
-    if (!prefersReducedMotion) {
+    if (cameraMode === "drift") {
       const angle = Math.sin(elapsed * SCENE.camera.driftSpeed) * SCENE.camera.driftRadians;
       camera.position.set(
         Math.sin(angle) * SCENE.camera.radius,
@@ -224,12 +239,29 @@ function boot(): void {
     sampleFrames += 1;
     if (sampleTime >= 1) {
       const fps = sampleFrames / sampleTime;
-      lowFpsTime = fps < SCENE.quality.minFps ? lowFpsTime + sampleTime : 0;
+      const minFps = effectiveMinFps(settings.performance.powerSave);
+      if (fps < minFps) {
+        lowFpsTime += sampleTime;
+        goodFpsTime = 0;
+      } else if (fps >= SCENE.quality.recoverFps) {
+        goodFpsTime += sampleTime;
+        lowFpsTime = 0;
+      } else {
+        lowFpsTime = 0;
+        goodFpsTime = 0;
+      }
       sampleTime = 0;
       sampleFrames = 0;
       if (lowFpsTime >= SCENE.quality.sampleWindow && downgradeStep < 2) {
         lowFpsTime = 0;
-        downgrade();
+        goodFpsTime = 0;
+        downgradeStep = (downgradeStep + 1) as 0 | 1 | 2;
+        applyQualityStep();
+      } else if (goodFpsTime >= SCENE.quality.recoverWindow && downgradeStep > 0) {
+        goodFpsTime = 0;
+        lowFpsTime = 0;
+        downgradeStep = (downgradeStep - 1) as 0 | 1 | 2;
+        applyQualityStep();
       }
     }
   };
@@ -246,6 +278,7 @@ function boot(): void {
     sampleTime = 0;
     sampleFrames = 0;
     lowFpsTime = 0;
+    goodFpsTime = 0;
     renderer.setAnimationLoop(frame);
   };
   document.addEventListener("visibilitychange", onVisibilityChange);
@@ -276,6 +309,7 @@ function boot(): void {
     sampleTime = 0;
     sampleFrames = 0;
     lowFpsTime = 0;
+    goodFpsTime = 0;
     if (document.hidden) return; // restored into a background tab — stay stopped (SPEC N2)
     renderer.setAnimationLoop(frame);
   });
