@@ -22,6 +22,7 @@ import {
   rhythmSpeedScale,
   type Boid,
 } from "./fish";
+import { computeCoralClusterCenters } from "./environment";
 import {
   buildSharkGeometry,
   sharkBodyRadius,
@@ -666,6 +667,19 @@ describe("FishSchool", () => {
     for (const school of schools) school.dispose();
   });
 
+  it("threads coralClusterCenters from createSchools into each species' habitat anchor picks", () => {
+    const clusterCenter = new Vector3(6, SCENE.floorY + 1, 6);
+    const schools = createSchools(FISH_REGISTRY, createRng(0x5eed), {
+      coralClusterCenters: [clusterCenter],
+    });
+    const yellowTangSchool = schools.find((school) => school.species.id === "yellow-tang") as FishSchool;
+    const boids = (yellowTangSchool as unknown as { boids: Boid[] }).boids;
+    for (const boid of boids) {
+      expect(boid.habitatAnchor.distanceTo(clusterCenter)).toBeLessThan(SCENE.coral.avoidanceRadius + 1.5);
+    }
+    for (const school of schools) school.dispose();
+  });
+
   it("keeps every fish finite and inside the bounds while swimming", () => {
     const species = FISH_REGISTRY[0] as FishSpecies;
     const school = new FishSchool(species, createRng(11));
@@ -954,4 +968,74 @@ describe("FishSchool", () => {
     const spread = (speeds: number[]): number => Math.max(...speeds) - Math.min(...speeds);
     expect(spread(rhythmicSpeeds)).toBeGreaterThan(spread(controlSpeeds));
   });
+});
+
+describe("60-second fixed-seed acceptance run (§4.3 AC)", () => {
+  it(
+    "keeps every swim-locomotion boid finite, in bounds, and within its turn-rate budget for 60 simulated seconds",
+    () => {
+    const clusterCenters = computeCoralClusterCenters(createRng(0x5eed), SCENE.coral.clusters);
+    const schools = createSchools(FISH_REGISTRY, createRng(0x5eed), { coralClusterCenters: clusterCenters });
+    const dt = 1 / 60;
+    const ceilingY = SCENE.floorY + SCENE.bounds.y * 2;
+
+    const previousDirections = new Map<FishSchool, Vector3[]>();
+    for (const school of schools) {
+      const boids = (school as unknown as { boids: Boid[] }).boids;
+      previousDirections.set(
+        school,
+        boids.map((b) => (b.velocity.lengthSq() > 1e-8 ? b.velocity.clone().normalize() : new Vector3(1, 0, 0))),
+      );
+    }
+
+    for (let step = 0; step < 3600; step += 1) {
+      const elapsed = step * dt;
+      for (const school of schools) {
+        const boids = (school as unknown as { boids: Boid[] }).boids;
+        // `nearWall` must reflect each boid's position *before* this frame's
+        // update, matching FishSchool.update()'s own timing — the turn-rate
+        // cap it (intentionally) bypasses is decided from the start-of-frame
+        // position, not the end-of-frame one.
+        const nearWallBeforeUpdate = boids.map(
+          (boid) => containSteer(boid.position, SCENE.bounds, SCENE.floorY, 2).lengthSq() > 1e-8,
+        );
+
+        school.update(dt, elapsed);
+        const species = school.species;
+        const prev = previousDirections.get(school) as Vector3[];
+
+        for (let i = 0; i < boids.length; i += 1) {
+          const boid = boids[i] as Boid;
+          expect(Number.isFinite(boid.position.x)).toBe(true);
+          expect(Number.isFinite(boid.position.y)).toBe(true);
+          expect(Number.isFinite(boid.position.z)).toBe(true);
+
+          if (species.behavior.locomotion === "swim") {
+            expect(Math.abs(boid.position.x)).toBeLessThanOrEqual(SCENE.bounds.x + 0.5);
+            expect(Math.abs(boid.position.z)).toBeLessThanOrEqual(SCENE.bounds.z + 0.5);
+            expect(boid.position.y).toBeGreaterThanOrEqual(SCENE.floorY - 0.5);
+            expect(boid.position.y).toBeLessThanOrEqual(ceilingY + 0.5);
+
+            const maxTurnRate = species.behavior.maxTurnRate;
+            // The turn-rate cap is intentionally bypassed near a wall/floor/
+            // ceiling (§4.3 design: boundary safety must never be delayed by
+            // a slow-turning species) — skip the budget check for those
+            // frames, matching FishSchool.update()'s own `nearWall` condition.
+            if (maxTurnRate !== undefined && !nearWallBeforeUpdate[i] && boid.velocity.lengthSq() > 1e-8) {
+              const direction = boid.velocity.clone().normalize();
+              const angle = (prev[i] as Vector3).angleTo(direction);
+              expect(angle).toBeLessThanOrEqual(maxTurnRate * dt + 1e-3);
+              prev[i] = direction;
+            } else if (boid.velocity.lengthSq() > 1e-8) {
+              prev[i] = boid.velocity.clone().normalize();
+            }
+          }
+        }
+      }
+    }
+
+    for (const school of schools) school.dispose();
+    },
+    30_000,
+  );
 });

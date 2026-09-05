@@ -91,6 +91,7 @@ function boot(): void {
     detail: settings.fish.detail,
     countScale: settings.fish.countScale,
     enabledSpecies: settings.fish.enabledSpecies,
+    coralClusterCenters: environment.coralClusterCenters,
   });
   const schoolsById = new Map<string, FishSchool>(schools.map((school) => [school.species.id, school]));
   for (const school of schools) school.addTo(scene);

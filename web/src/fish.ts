@@ -509,6 +509,7 @@ export interface CreateSchoolsOptions {
   readonly detail?: DetailLevel;
   readonly countScale?: number;
   readonly enabledSpecies?: Readonly<Record<string, boolean>>;
+  readonly coralClusterCenters?: readonly Vector3[];
 }
 
 /** Instantiate every registry species — the only place the registry is read. */
@@ -518,7 +519,12 @@ export function createSchools(
   options: CreateSchoolsOptions = {},
 ): FishSchool[] {
   return registry.map((species) => {
-    const school = new FishSchool(species, rng, options.detail ?? "medium");
+    const school = new FishSchool(
+      species,
+      rng,
+      options.detail ?? "medium",
+      options.coralClusterCenters ?? [],
+    );
     if (options.countScale !== undefined && options.countScale !== 1) {
       school.rebuildInstances(options.countScale);
     }
