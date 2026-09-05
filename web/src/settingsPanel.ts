@@ -14,12 +14,15 @@ import {
   withBackgroundObjectCountScale,
   withBubblesDensityScale,
   withBubblesEnabled,
+  withCameraMode,
   withCaustics,
   withFishCountScale,
   withFishDetail,
   withLightingIntensityScale,
+  withPowerSave,
   withPreset,
   withSpeciesEnabled,
+  withVolume,
 } from "./settings";
 
 export interface SettingsPanelCallbacks {
@@ -43,19 +46,15 @@ function section(title: string): { section: HTMLElement; body: HTMLElement } {
   return { section: el, body };
 }
 
-function detailRadioGroup(
+function radioGroup<T extends string>(
   name: string,
-  current: DetailLevel,
-  onSelect: (detail: DetailLevel) => void,
+  options: readonly { value: T; label: string }[],
+  current: T,
+  onSelect: (value: T) => void,
   cleanups: (() => void)[],
 ): HTMLElement {
   const group = document.createElement("div");
   group.className = "settings-panel__radios";
-  const options: { value: DetailLevel; label: string }[] = [
-    { value: "low", label: "낮음" },
-    { value: "medium", label: "보통" },
-    { value: "high", label: "높음" },
-  ];
   for (const option of options) {
     const id = `${name}-${option.value}`;
     const label = document.createElement("label");
@@ -77,6 +76,26 @@ function detailRadioGroup(
   }
   return group;
 }
+
+const DETAIL_OPTIONS: readonly { value: DetailLevel; label: string }[] = [
+  { value: "low", label: "낮음" },
+  { value: "medium", label: "보통" },
+  { value: "high", label: "높음" },
+];
+
+function detailRadioGroup(
+  name: string,
+  current: DetailLevel,
+  onSelect: (detail: DetailLevel) => void,
+  cleanups: (() => void)[],
+): HTMLElement {
+  return radioGroup(name, DETAIL_OPTIONS, current, onSelect, cleanups);
+}
+
+const CAMERA_MODE_OPTIONS: readonly { value: "drift" | "fixed"; label: string }[] = [
+  { value: "drift", label: "천천히 이동" },
+  { value: "fixed", label: "고정" },
+];
 
 function sliderRow(
   labelText: string,
@@ -317,6 +336,46 @@ export function createSettingsPanel(
     ),
   );
 
+  // 카메라 --------------------------------------------------------------------
+  const camera = section("카메라");
+  camera.body.append(
+    radioGroup(
+      "camera-mode",
+      CAMERA_MODE_OPTIONS,
+      current.camera.mode,
+      (mode) => emit(withCameraMode(current, mode)),
+      cleanups,
+    ),
+  );
+
+  // 성능 ----------------------------------------------------------------------
+  const performance = section("성능");
+  performance.body.append(
+    checkboxRow(
+      "절전 모드 (낮은 해상도 + 30fps대 목표)",
+      "performance-power-save",
+      current.performance.powerSave,
+      (checked) => emit(withPowerSave(current, checked)),
+      cleanups,
+    ),
+  );
+
+  // 사운드 ----------------------------------------------------------------------
+  const audio = section("사운드");
+  audio.body.append(
+    sliderRow(
+      "음량",
+      "audio-volume",
+      0,
+      1,
+      0.01,
+      current.audio.volume,
+      (v) => `${Math.round(v * 100)}%`,
+      (v) => emit(withVolume(current, v)),
+      cleanups,
+    ),
+  );
+
   panel.append(
     mood.section,
     species.section,
@@ -326,6 +385,9 @@ export function createSettingsPanel(
     backgroundCount.section,
     lighting.section,
     bubbles.section,
+    camera.section,
+    performance.section,
+    audio.section,
   );
 
   return {
