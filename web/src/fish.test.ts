@@ -47,6 +47,7 @@ describe("fish registry", () => {
       "pink-cardinalfish",
       "great-white-shark",
       "seahorse",
+      "green-sea-turtle",
     ]);
     expect(FISH_REGISTRY.slice(3).map((species) => species.label)).toEqual([
       "나비치",
@@ -54,6 +55,7 @@ describe("fish registry", () => {
       "자주열대어",
       "백상아리",
       "해마",
+      "푸른바다거북",
     ]);
   });
 
@@ -70,7 +72,9 @@ describe("fish registry", () => {
 
   it("defines a complete, well-formed entry per species", () => {
     for (const species of FISH_REGISTRY) {
-      expect(["lowpoly-fish", "lowpoly-shark", "lowpoly-seahorse"]).toContain(species.geometry);
+      expect(["lowpoly-fish", "lowpoly-shark", "lowpoly-seahorse", "lowpoly-turtle"]).toContain(
+        species.geometry,
+      );
       expect(species.palette.body).toMatch(HEX);
       expect(species.palette.fin).toMatch(HEX);
       expect(species.palette.accent).toMatch(HEX);
@@ -84,9 +88,12 @@ describe("fish registry", () => {
         expect(species.shape.stripes).toBeGreaterThanOrEqual(0);
       } else if (species.geometry === "lowpoly-shark") {
         expect(species.shape.dorsalFinHeight).toBeGreaterThan(0);
-      } else {
+      } else if (species.geometry === "lowpoly-seahorse") {
         expect(species.shape.snoutLength).toBeGreaterThan(0);
         expect(species.shape.curlRadius).toBeGreaterThan(0);
+      } else {
+        expect(species.shape.shellLength).toBeGreaterThan(0);
+        expect(species.shape.flipperSpan).toBeGreaterThan(0);
       }
     }
   });
@@ -336,6 +343,23 @@ describe("buildCreatureGeometry seahorse variant", () => {
       Math.max(...zValues) - Math.min(...zValues),
     );
     expect(Math.max(...zValues) - Math.min(...zValues)).toBeGreaterThan(0.1);
+    geometry.dispose();
+  });
+});
+
+describe("buildCreatureGeometry turtle variant", () => {
+  it("builds a finite shell and four flippers", () => {
+    const turtle = FISH_REGISTRY.find((species) => species.geometry === "lowpoly-turtle");
+    expect(turtle).toBeDefined();
+    if (!turtle) return;
+
+    const geometry = buildCreatureGeometry(turtle, "medium");
+    const position = geometry.getAttribute("position");
+    expect(position.count / 3).toBeGreaterThan(20);
+    for (const value of position.array) expect(Number.isFinite(value)).toBe(true);
+    const xValues = Array.from({ length: position.count }, (_, i) => position.getX(i));
+    expect(Math.max(...xValues)).toBeGreaterThan(turtle.shape.shellLength / 2);
+    expect(Math.min(...xValues)).toBeLessThan(-turtle.shape.shellLength / 2 + 0.001);
     geometry.dispose();
   });
 });

@@ -55,8 +55,8 @@ aquarium/
     └── src/
         ├── main.ts         # 렌더 루프, 카메라 드리프트, 적응형 품질 제어
         ├── config.ts       # 생물 레지스트리(FISH_REGISTRY) 및 씬 설정
-        ├── fish.ts         # geometry 디스패치, 절차적 생물 인스턴싱 & Boid 시뮬레이션
-        ├── creatures/      # body plan별 geometry builder (fish, shark)
+        ├── fish.ts         # geometry 디스패치, 생물 인스턴싱 & Boid 시뮬레이션
+        ├── creatures/      # body plan별 geometry builder (fish, shark, seahorse, turtle)
         ├── environment.ts  # 해저 지형, 산호군락, 해초, 광선 및 조명 생성
         ├── particles.ts    # 상승 기포 파티클 시스템
         ├── ui.ts           # 로딩 화면, 타이틀, 앰비언트 사운드(Web Audio API)
@@ -64,7 +64,7 @@ aquarium/
         └── fish.test.ts    # 생물 geometry 및 시뮬레이션 단위 테스트
 ```
 
-현재 registry에는 물고기·상어·해마가 있으며, 학교 시뮬레이션은 수영(`swim`)과 제자리 부유(`hover`) locomotion을 지원합니다. 거북이 전용 geometry는 후속 확장 대상입니다.
+현재 registry에는 물고기·상어·해마·거북이가 있으며, body plan별 geometry builder와 수영(`swim`)·제자리 부유(`hover`) locomotion을 지원합니다.
 
 ---
 

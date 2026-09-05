@@ -1,5 +1,5 @@
 /**
- * Procedural low-poly fish geometry and instanced school simulation (SPEC F2, §6.2).
+ * Shared creature instancing and school simulation (SPEC F2, §6.2).
  *
  * One `InstancedMesh` per registry species keeps the whole school at a single
  * draw call. Body/fin/accent colours ride on a vertex-colour attribute so a
@@ -7,7 +7,6 @@
  */
 
 import {
-  BufferAttribute,
   BufferGeometry,
   Color,
   DynamicDrawUsage,
@@ -21,16 +20,20 @@ import {
 } from "three";
 
 import {
-  FISH_DETAIL_PROFILES,
   FISH_REGISTRY,
   SCENE,
   type DetailLevel,
   type CreatureSpecies,
-  type FishShape,
   type FishSpecies,
 } from "./config";
+import {
+  buildFishGeometry,
+} from "./creatures/geometry/fish";
 import { buildSharkGeometry } from "./creatures/geometry/shark";
 import { buildSeahorseGeometry } from "./creatures/geometry/seahorse";
+import { buildTurtleGeometry } from "./creatures/geometry/turtle";
+
+export { buildFishGeometry, computeFacetJitter } from "./creatures/geometry/fish";
 
 /** Fish geometry is modelled nose-first along +X. */
 export const FORWARD = new Vector3(1, 0, 0);
@@ -47,181 +50,6 @@ export function createRng(seed: number): () => number {
   };
 }
 
-/** Radius profile along the body: widest just behind the head. */
-function bodyRadius(t: number): number {
-  const shaped = Math.sin(Math.PI * Math.pow(t, 0.62));
-  return 0.12 + 0.88 * shaped;
-}
-
-interface MeshBuffers {
-  readonly positions: number[];
-  readonly colors: number[];
-}
-
-function pushVertex(buffers: MeshBuffers, v: Vector3, c: Color): void {
-  buffers.positions.push(v.x, v.y, v.z);
-  buffers.colors.push(c.r, c.g, c.b);
-}
-
-function pushTriangle(buffers: MeshBuffers, a: Vector3, b: Vector3, c: Vector3, color: Color): void {
-  pushVertex(buffers, a, color);
-  pushVertex(buffers, b, color);
-  pushVertex(buffers, c, color);
-}
-
-/** Emit a triangle twice with opposite winding so thin fins read from both sides. */
-function pushFin(buffers: MeshBuffers, a: Vector3, b: Vector3, c: Vector3, color: Color): void {
-  pushTriangle(buffers, a, b, c, color);
-  pushTriangle(buffers, a, c, b, color);
-}
-
-/** Deterministic hash into [0, 1) from two integers — no external RNG stream. */
-function hash2(a: number, b: number): number {
-  const s = Math.sin(a * 127.1 + b * 311.7) * 43758.5453123;
-  return s - Math.floor(s);
-}
-
-/**
- * Per-vertex angle/radius nudge for a body ring, breaking the perfectly
- * smooth revolve into irregular facets (SPEC §6.2.1, AC-9). Pure function of
- * its inputs — same `(ringIndex, dirIndex, sides, seed, facetJitter)` always
- * yields the same offset, so rebuilds/hot-reloads never reshuffle the shape.
- * `facetJitter: 0` is the identity: v1's exact regular ring.
- */
-export function computeFacetJitter(
-  ringIndex: number,
-  dirIndex: number,
-  sides: number,
-  seed: number,
-  facetJitter: number,
-): { angleOffset: number; radialScale: number } {
-  if (facetJitter <= 0) return { angleOffset: 0, radialScale: 1 };
-  const angleOffset =
-    (hash2(ringIndex * 7 + seed, dirIndex * 13 + 1) - 0.5) * facetJitter * ((Math.PI * 2) / sides);
-  const radialScale = 1 + (hash2(ringIndex * 3 + seed, dirIndex * 5 + 2) - 0.5) * 2 * facetJitter;
-  return { angleOffset, radialScale };
-}
-
-/**
- * A deterministic per-species jitter seed derived from its silhouette, so two
- * species sharing a shape still get differently placed facets.
- */
-function facetJitterSeed(shape: FishShape): number {
-  return Math.round(
-    shape.length * 1000 + shape.height * 137 + shape.width * 29 + shape.tailSpan * 7 + shape.stripes * 3,
-  );
-}
-
-/** Cross-section vertex at `dirIndex`/`sides` around the body, an ellipse in (y, z). */
-function ringVertex(
-  x: number,
-  radius: number,
-  shape: FishShape,
-  dirIndex: number,
-  sides: number,
-  ringIndex = 0,
-  seed = 0,
-  facetJitter = 0,
-): Vector3 {
-  // Wrap dirIndex for the jitter hash so the ring's last and first vertex
-  // (dirIndex === sides vs. 0 — the same seam point) always jitter identically.
-  const { angleOffset, radialScale } = computeFacetJitter(
-    ringIndex,
-    dirIndex % sides,
-    sides,
-    seed,
-    facetJitter,
-  );
-  const angle = (dirIndex / sides) * Math.PI * 2 + angleOffset;
-  const dy = Math.cos(angle) * radialScale;
-  const dz = Math.sin(angle) * radialScale;
-  return new Vector3(x, dy * (shape.height / 2) * radius, dz * (shape.width / 2) * radius);
-}
-
-/**
- * Build a faceted fish body plus caudal, dorsal and pectoral fins.
- * `detail` (SPEC §6.2) selects the body's ring/segment subdivision: `medium`
- * (default) reproduces the exact v1 shape at ~50 triangles/species; `high`
- * targets ~2.5x that (AC-2).
- */
-export function buildFishGeometry(
-  shape: FishShape,
-  palette: FishSpecies["palette"],
-  detail: DetailLevel = "medium",
-): BufferGeometry {
-  const body = new Color(palette.body);
-  const fin = new Color(palette.fin);
-  const accent = new Color(palette.accent);
-
-  const { bodySegments, ringSides, facetJitter } = FISH_DETAIL_PROFILES[detail];
-  const jitterSeed = facetJitterSeed(shape);
-  const buffers: MeshBuffers = { positions: [], colors: [] };
-  const half = shape.length / 2;
-
-  const stripeSegments = new Set<number>();
-  if (shape.stripes > 0) {
-    const stride = bodySegments / (shape.stripes + 1);
-    for (let s = 1; s <= shape.stripes; s += 1) {
-      stripeSegments.add(Math.min(bodySegments - 1, Math.round(s * stride) - 1));
-    }
-  }
-
-  for (let i = 0; i < bodySegments; i += 1) {
-    const t0 = i / bodySegments;
-    const t1 = (i + 1) / bodySegments;
-    const x0 = half - shape.length * t0;
-    const x1 = half - shape.length * t1;
-    const r0 = bodyRadius(t0);
-    const r1 = bodyRadius(t1);
-    const segmentColor = stripeSegments.has(i) ? accent : body;
-
-    for (let k = 0; k < ringSides; k += 1) {
-      const a = ringVertex(x0, r0, shape, k, ringSides, i, jitterSeed, facetJitter);
-      const b = ringVertex(x0, r0, shape, k + 1, ringSides, i, jitterSeed, facetJitter);
-      const c = ringVertex(x1, r1, shape, k + 1, ringSides, i + 1, jitterSeed, facetJitter);
-      const d = ringVertex(x1, r1, shape, k, ringSides, i + 1, jitterSeed, facetJitter);
-      // Winding chosen so face normals point away from the body axis.
-      pushTriangle(buffers, a, c, b, segmentColor);
-      pushTriangle(buffers, a, d, c, segmentColor);
-    }
-  }
-
-  // Caudal (tail) fin: forked, in the X-Y plane behind the body.
-  const tailRoot = new Vector3(half - shape.length, 0, 0);
-  const tailNotch = new Vector3(tailRoot.x - shape.tailSpan * 0.55, 0, 0);
-  const tailTop = new Vector3(tailRoot.x - shape.tailSpan, shape.tailSpan * 0.9, 0);
-  const tailBottom = new Vector3(tailRoot.x - shape.tailSpan, -shape.tailSpan * 0.9, 0);
-  pushFin(buffers, tailRoot, tailTop, tailNotch, fin);
-  pushFin(buffers, tailRoot, tailNotch, tailBottom, fin);
-
-  // Dorsal fin.
-  pushFin(
-    buffers,
-    new Vector3(half - shape.length * 0.25, shape.height * 0.44, 0),
-    new Vector3(half - shape.length * 0.62, shape.height * 0.42, 0),
-    new Vector3(half - shape.length * 0.5, shape.height * 0.86, 0),
-    fin,
-  );
-
-  // Pectoral fins, one per flank.
-  for (const side of [1, -1]) {
-    pushFin(
-      buffers,
-      new Vector3(half - shape.length * 0.3, 0, (side * shape.width) / 2),
-      new Vector3(half - shape.length * 0.52, 0, (side * shape.width) / 2),
-      new Vector3(half - shape.length * 0.46, -shape.height * 0.34, side * shape.width * 1.1),
-      fin,
-    );
-  }
-
-  const geometry = new BufferGeometry();
-  geometry.setAttribute("position", new BufferAttribute(new Float32Array(buffers.positions), 3));
-  geometry.setAttribute("color", new BufferAttribute(new Float32Array(buffers.colors), 3));
-  geometry.computeVertexNormals();
-  geometry.computeBoundingSphere();
-  return geometry;
-}
-
 /** Dispatch a registered creature to the builder for its body plan. */
 export function buildCreatureGeometry(
   species: CreatureSpecies,
@@ -234,6 +62,8 @@ export function buildCreatureGeometry(
       return buildSharkGeometry(species.shape, species.palette, detail);
     case "lowpoly-seahorse":
       return buildSeahorseGeometry(species.shape, species.palette, detail);
+    case "lowpoly-turtle":
+      return buildTurtleGeometry(species.shape, species.palette, detail);
   }
 }
 

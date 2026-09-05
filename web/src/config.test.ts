@@ -30,6 +30,13 @@ describe("creature registry", () => {
     expect(seahorse?.geometry).toBe("lowpoly-seahorse");
     expect(seahorse?.behavior.locomotion).toBe("hover");
   });
+
+  it("includes a turtle with a dedicated body plan and swim locomotion", () => {
+    const turtle = FISH_REGISTRY.find((species) => species.id === "green-sea-turtle");
+    expect(turtle).toBeDefined();
+    expect(turtle?.geometry).toBe("lowpoly-turtle");
+    expect(turtle?.behavior.locomotion).toBe("swim");
+  });
 });
 
 describe("computeQualityScales", () => {

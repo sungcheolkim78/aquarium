@@ -172,7 +172,7 @@ Expected: all tests pass and Vite produces a production build.
 
 - [ ] **Step 3: Update project documentation**
 
-Document the new shark entry, the geometry-keyed dispatch boundary, and the fact that turtle/seahorse geometry and `hover` locomotion are follow-up stages rather than part of this slice.
+Document the shark, seahorse, and turtle entries, the geometry-keyed dispatch boundary, and the fact that `CreatureSchool` renaming remains a later cleanup.
 
 - [ ] **Step 4: Run a final diff and whitespace check**
 
@@ -187,6 +187,6 @@ git add docs/SPEC.md README.md web/src
 git commit -m "feat: add shark creature vertical slice"
 ```
 
-## Follow-up Plan: Turtle, Seahorse, and Hover Locomotion
+## Follow-up Plan: CreatureSchool Naming Cleanup
 
-After the shark slice is stable, add `lowpoly-turtle` and `lowpoly-seahorse` variants with independent shape/detail profiles. Generalize the registry type to `CreatureSpecies`, move school logic to `CreatureSchool`, and add `behavior.locomotion: "swim" | "hover"`. Implement seahorse hover using a deterministic anchor plus slow vertical oscillation; keep cohesion/separation/containment separate from locomotion so it does not inherit fish-like abrupt turns.
+The current implementation supports four geometry variants and both `swim` and `hover` locomotion, while retaining the `FishSchool` name for API compatibility. A later cleanup can rename the class and settings terminology to `CreatureSchool`/`CreatureSpecies` without changing the geometry or behavior contracts.

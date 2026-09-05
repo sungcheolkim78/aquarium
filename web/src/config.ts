@@ -7,7 +7,11 @@
  */
 
 /** Procedural geometry builders available to the registry. */
-export type CreatureGeometryId = "lowpoly-fish" | "lowpoly-shark" | "lowpoly-seahorse";
+export type CreatureGeometryId =
+  | "lowpoly-fish"
+  | "lowpoly-shark"
+  | "lowpoly-seahorse"
+  | "lowpoly-turtle";
 /** Backward-compatible name for callers that still use the fish terminology. */
 export type FishGeometryId = CreatureGeometryId;
 
@@ -141,10 +145,24 @@ export interface SeahorseShape {
   readonly finSpan: number;
 }
 
+/** Silhouette parameters for a turtle shell and four flippers. */
+export interface TurtleShape {
+  readonly shellLength: number;
+  readonly shellWidth: number;
+  readonly shellHeight: number;
+  readonly flipperSpan: number;
+  readonly headLength: number;
+  /** Shared shader scale; turtles are still authored nose-first along +X. */
+  readonly length: number;
+  readonly height: number;
+  readonly width: number;
+}
+
 export type CreatureVariant =
   | { readonly geometry: "lowpoly-fish"; readonly shape: FishShape }
   | { readonly geometry: "lowpoly-shark"; readonly shape: SharkShape }
-  | { readonly geometry: "lowpoly-seahorse"; readonly shape: SeahorseShape };
+  | { readonly geometry: "lowpoly-seahorse"; readonly shape: SeahorseShape }
+  | { readonly geometry: "lowpoly-turtle"; readonly shape: TurtleShape };
 
 interface CreatureDefinition {
   readonly id: string;
@@ -266,6 +284,24 @@ export const FISH_REGISTRY: readonly FishSpecies[] = [
       hoverFrequency: 0.16,
     },
     shape: { length: 1.1, height: 1.1, width: 0.2, snoutLength: 0.32, curlRadius: 0.28, finSpan: 0.26 },
+    count: 2,
+  },
+  {
+    id: "green-sea-turtle",
+    label: "푸른바다거북",
+    geometry: "lowpoly-turtle",
+    palette: { body: "#4e9b78", fin: "#2f665a", accent: "#b9d58a" },
+    behavior: { speed: 0.48, locomotion: "swim", schooling: false, activityRadius: 8.5 },
+    shape: {
+      shellLength: 1.05,
+      shellWidth: 0.72,
+      shellHeight: 0.32,
+      flipperSpan: 0.62,
+      headLength: 0.24,
+      length: 1.25,
+      height: 0.7,
+      width: 0.95,
+    },
     count: 2,
   },
 ];
