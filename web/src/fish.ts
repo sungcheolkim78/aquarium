@@ -75,6 +75,8 @@ export interface Boid {
   readonly phase: number;
   /** Stable position used as the anchor for non-swimming creatures. */
   readonly hoverOrigin: Vector3;
+  /** Point this individual weakly returns to when its species has a `territoryStrength` (§4.3). */
+  readonly habitatAnchor: Vector3;
 }
 
 /** Mean position of a school; returns the origin for an empty school. */
@@ -185,6 +187,7 @@ const SEPARATION = 1.4;
 const SEPARATION_RADIUS = 0.95;
 const CONTAIN = 1.8;
 const WANDER = 0.55;
+const TERRITORY = 2.0;
 
 /** One species' school: geometry, instanced mesh, and its steering update. */
 export class FishSchool {
@@ -205,10 +208,17 @@ export class FishSchool {
   private readonly heading = new Vector3();
   /** Current instance capacity, set by the user's "fish count" scale (SPEC §6.5.3). */
   private capacity: number;
+  private readonly coralClusterCenters: readonly Vector3[];
 
-  constructor(species: FishSpecies, rng: () => number, detail: DetailLevel = "medium") {
+  constructor(
+    species: FishSpecies,
+    rng: () => number,
+    detail: DetailLevel = "medium",
+    coralClusterCenters: readonly Vector3[] = [],
+  ) {
     this.species = species;
     this.rng = rng;
+    this.coralClusterCenters = coralClusterCenters;
     this.capacity = species.count;
     this.geometry = buildCreatureGeometry(species, detail);
     this.material = new MeshLambertMaterial({
@@ -266,7 +276,7 @@ transformed.z += swayWave * swayWeight * swayWeight * ${(species.shape.length * 
       this.writeMatrices();
       return;
     }
-    const { speed, schooling } = this.species.behavior;
+    const { speed, schooling, territoryStrength } = this.species.behavior;
     const active = this.mesh.count;
     const school = this.boids.slice(0, active);
     if (schooling) computeCentroid(school, this.centroid);
@@ -308,6 +318,14 @@ transformed.z += swayWave * swayWeight * swayWeight * ${(species.shape.length * 
           CONTAIN,
         ),
       );
+
+      if (territoryStrength) {
+        this.scratch
+          .copy(boid.habitatAnchor)
+          .sub(boid.position)
+          .multiplyScalar(territoryStrength * TERRITORY);
+        this.steer.add(this.scratch);
+      }
 
       boid.velocity.addScaledVector(this.steer, dt);
       const currentSpeed = boid.velocity.length();
@@ -397,6 +415,20 @@ transformed.z += swayWave * swayWeight * swayWeight * ${(species.shape.length * 
         SCENE.floorY + 2.2 + rng() * (SCENE.bounds.y * 1.4),
         Math.sin(angle) * dist,
       );
+    const territoryStrength = this.species.behavior.territoryStrength ?? 0;
+    let habitatAnchor = position.clone();
+    if (territoryStrength > 0 && this.coralClusterCenters.length > 0) {
+      const center = this.coralClusterCenters[
+        Math.floor(rng() * this.coralClusterCenters.length)
+      ] as Vector3;
+      const offsetAngle = rng() * Math.PI * 2;
+      const offsetDistance = SCENE.coral.avoidanceRadius + 0.6 + rng() * 0.8;
+      habitatAnchor = new Vector3(
+        center.x + Math.cos(offsetAngle) * offsetDistance,
+        center.y,
+        center.z + Math.sin(offsetAngle) * offsetDistance,
+      );
+    }
     return {
       position,
       velocity: new Vector3(rng() - 0.5, (rng() - 0.5) * 0.25, rng() - 0.5)
@@ -404,6 +436,7 @@ transformed.z += swayWave * swayWeight * swayWeight * ${(species.shape.length * 
         .multiplyScalar(this.species.behavior.speed),
       phase,
       hoverOrigin: position.clone(),
+      habitatAnchor,
     };
   }
 

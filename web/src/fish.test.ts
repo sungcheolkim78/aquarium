@@ -46,7 +46,13 @@ const HEX = /^#[0-9a-f]{6}$/i;
 
 function boid(x: number, y: number, z: number): Boid {
   const position = new Vector3(x, y, z);
-  return { position, velocity: new Vector3(1, 0, 0), phase: 0, hoverOrigin: position.clone() };
+  return {
+    position,
+    velocity: new Vector3(1, 0, 0),
+    phase: 0,
+    hoverOrigin: position.clone(),
+    habitatAnchor: position.clone(),
+  };
 }
 
 describe("fish registry", () => {
@@ -765,6 +771,47 @@ describe("FishSchool", () => {
     }
     expect(moved[13] ?? 0).not.toBeCloseTo(initial[13] ?? 0);
     expect(later[13] ?? 0).not.toBeCloseTo(moved[13] ?? 0);
+    school.dispose();
+  });
+
+  it("pulls a territorial species' individuals to settle near their own habitat anchor (§4.3 habitat point)", () => {
+    const yellowTang = FISH_REGISTRY.find((species) => species.id === "yellow-tang") as FishSpecies;
+    expect(yellowTang.behavior.territoryStrength).toBeGreaterThan(0);
+    const clusterCenters = [new Vector3(6, SCENE.floorY + 1, 6)];
+    const school = new FishSchool(yellowTang, createRng(21), "medium", clusterCenters);
+    const boids = (school as unknown as { boids: Boid[] }).boids;
+    // Every boid's anchor should itself land near the one supplied cluster.
+    for (const boid of boids) {
+      expect(boid.habitatAnchor.distanceTo(clusterCenters[0] as Vector3)).toBeLessThan(
+        SCENE.coral.avoidanceRadius + 1.5,
+      );
+    }
+
+    for (let step = 0; step < 3600; step += 1) school.update(1 / 60, step / 60);
+
+    for (const boid of boids) {
+      // Well inside the free-roam activityRadius (9), close to its own anchor.
+      expect(boid.position.distanceTo(boid.habitatAnchor)).toBeLessThan(4);
+    }
+    school.dispose();
+  });
+
+  it("leaves a non-territorial species free to roam past a nearby cluster (control)", () => {
+    const clownfish = FISH_REGISTRY[0] as FishSpecies;
+    expect(clownfish.behavior.territoryStrength ?? 0).toBe(0);
+    const clusterCenters = [new Vector3(6, SCENE.floorY + 1, 6)];
+    const school = new FishSchool(clownfish, createRng(21), "medium", clusterCenters);
+    for (let step = 0; step < 600; step += 1) school.update(1 / 60, step / 60);
+
+    const matrix = school.mesh.instanceMatrix.array;
+    let anyFar = false;
+    for (let i = 0; i < school.mesh.count; i += 1) {
+      const offset = i * 16;
+      const x = matrix[offset + 12] ?? 0;
+      const z = matrix[offset + 14] ?? 0;
+      if (Math.hypot(x - (clusterCenters[0] as Vector3).x, z - (clusterCenters[0] as Vector3).z) > 4) anyFar = true;
+    }
+    expect(anyFar).toBe(true);
     school.dispose();
   });
 });
