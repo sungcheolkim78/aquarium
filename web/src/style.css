@@ -1,0 +1,185 @@
+/**
+ * Design tokens + minimal overlay UI (SPEC F5, §6.4).
+ * The palette mirrors the scene tokens in `config.ts`.
+ */
+
+:root {
+  --aq-deep: #04121f;
+  --aq-water: #0a3550;
+  --aq-mist: #bfeaff;
+  --aq-foam: rgba(191, 234, 255, 0.72);
+  --aq-ink: rgba(4, 18, 31, 0.35);
+  --aq-ui-size: 2.75rem;
+  --aq-ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --aq-font: "Pretendard", "Apple SD Gothic Neo", "Noto Sans KR", system-ui, -apple-system,
+    "Segoe UI", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--aq-deep);
+  color: var(--aq-mist);
+  font-family: var(--aq-font);
+  -webkit-font-smoothing: antialiased;
+}
+
+#scene {
+  display: block;
+  width: 100vw;
+  height: 100vh;
+  touch-action: none;
+}
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  display: grid;
+  grid-template-rows: 1fr auto;
+}
+
+/* Loading indicator ------------------------------------------------------- */
+
+.loader {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  gap: 1.25rem;
+  justify-items: center;
+  background: radial-gradient(circle at 50% 45%, var(--aq-water), var(--aq-deep) 70%);
+  transition:
+    opacity 0.85s var(--aq-ease),
+    visibility 0.85s var(--aq-ease);
+}
+
+.loader.is-hidden {
+  opacity: 0;
+  visibility: hidden;
+}
+
+.loader__ring {
+  width: 2.5rem;
+  height: 2.5rem;
+  border: 2px solid rgba(191, 234, 255, 0.18);
+  border-top-color: var(--aq-mist);
+  border-radius: 50%;
+  animation: aq-spin 1.6s linear infinite;
+}
+
+.loader__text {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 400;
+  letter-spacing: 0.22em;
+  color: var(--aq-foam);
+}
+
+@keyframes aq-spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+/* Title ------------------------------------------------------------------- */
+
+.title {
+  margin: 0;
+  padding: clamp(1.25rem, 4vh, 2.5rem) clamp(1.25rem, 5vw, 3rem);
+  align-self: start;
+  font-size: clamp(0.95rem, 2.4vw, 1.2rem);
+  font-weight: 300;
+  letter-spacing: 0.34em;
+  color: var(--aq-foam);
+  text-shadow: 0 1px 12px var(--aq-ink);
+  opacity: 0;
+  transition: opacity 1.8s var(--aq-ease) 0.4s;
+}
+
+.overlay.is-ready .title {
+  opacity: 1;
+}
+
+/* Ambient sound toggle ---------------------------------------------------- */
+
+.sound-toggle {
+  pointer-events: auto;
+  justify-self: end;
+  margin: clamp(1rem, 3vh, 2rem) clamp(1.25rem, 5vw, 3rem);
+  width: var(--aq-ui-size);
+  height: var(--aq-ui-size);
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid rgba(191, 234, 255, 0.22);
+  border-radius: 50%;
+  background: rgba(4, 18, 31, 0.28);
+  color: var(--aq-foam);
+  cursor: pointer;
+  opacity: 0;
+  backdrop-filter: blur(6px);
+  transition:
+    opacity 1.8s var(--aq-ease) 0.6s,
+    border-color 0.35s var(--aq-ease),
+    color 0.35s var(--aq-ease),
+    background 0.35s var(--aq-ease);
+}
+
+.overlay.is-ready .sound-toggle {
+  opacity: 1;
+}
+
+.sound-toggle:hover:not(:disabled),
+.sound-toggle:focus-visible {
+  border-color: rgba(191, 234, 255, 0.5);
+  background: rgba(10, 53, 80, 0.5);
+  color: var(--aq-mist);
+  outline: none;
+}
+
+.sound-toggle:disabled {
+  cursor: progress;
+}
+
+.sound-toggle.is-on {
+  border-color: rgba(191, 234, 255, 0.55);
+  color: #ffffff;
+}
+
+.sound-toggle svg {
+  width: 1.25rem;
+  height: 1.25rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Fallback notice --------------------------------------------------------- */
+
+.notice {
+  grid-row: 1 / -1;
+  align-self: center;
+  justify-self: center;
+  max-width: 28rem;
+  margin: 0;
+  padding: 0 1.5rem;
+  text-align: center;
+  line-height: 1.8;
+  font-size: 0.95rem;
+  color: var(--aq-foam);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loader__ring {
+    animation-duration: 3.2s;
+  }
+}
