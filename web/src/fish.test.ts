@@ -4,7 +4,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { Vector3 } from "three";
+import { Raycaster, Vector3 } from "three";
 
 import { FISH_REGISTRY, SCENE, totalFishCount, type FishSpecies } from "./config";
 import {
@@ -967,6 +967,61 @@ describe("FishSchool", () => {
 
     const spread = (speeds: number[]): number => Math.max(...speeds) - Math.min(...speeds);
     expect(spread(rhythmicSpeeds)).toBeGreaterThan(spread(controlSpeeds));
+  });
+});
+
+describe("InstancedMesh picking and hidden/inactive instances (§4.4 AC)", () => {
+  function raycastAt(target: Vector3): Raycaster {
+    const raycaster = new Raycaster();
+    raycaster.ray.origin.copy(target).addScaledVector(new Vector3(0, 0, 1), -5);
+    raycaster.ray.direction.set(0, 0, 1);
+    raycaster.near = 0;
+    raycaster.far = 20;
+    return raycaster;
+  }
+
+  it("does NOT stop a raw Raycaster from hitting a hidden mesh — three.js's Raycaster never checks .visible itself", () => {
+    // A real finding while writing this test: three.js 0.180's
+    // Raycaster.intersectObject/intersectObjects apply no visibility check
+    // at all (confirmed against node_modules/three/src/core/Raycaster.js).
+    // The population-count case below IS handled automatically by
+    // InstancedMesh.raycast() itself, but hidden-species exclusion is not —
+    // callers must filter by `mesh.visible` themselves (see the next test,
+    // and main.ts's click handler, which does exactly this).
+    const species = FISH_REGISTRY[0] as FishSpecies;
+    const school = new FishSchool(species, createRng(1));
+    const boids = (school as unknown as { boids: Boid[] }).boids;
+    const raycaster = raycastAt((boids[0] as Boid).position);
+
+    expect(raycaster.intersectObject(school.mesh, false).length).toBeGreaterThan(0);
+    school.setVisible(false);
+    expect(raycaster.intersectObject(school.mesh, false).length).toBeGreaterThan(0);
+    school.dispose();
+  });
+
+  it("excludes a hidden species when the caller filters by mesh.visible before raycasting (the pattern main.ts uses)", () => {
+    const species = FISH_REGISTRY[0] as FishSpecies;
+    const school = new FishSchool(species, createRng(1));
+    const boids = (school as unknown as { boids: Boid[] }).boids;
+    const raycaster = raycastAt((boids[0] as Boid).position);
+    school.setVisible(false);
+
+    const pickable = [school].filter((candidate) => candidate.mesh.visible).map((candidate) => candidate.mesh);
+    expect(raycaster.intersectObjects(pickable).length).toBe(0);
+    school.dispose();
+  });
+
+  it("stops hitting an instance once it falls outside the population-scaled active count", () => {
+    const species = FISH_REGISTRY[0] as FishSpecies;
+    const school = new FishSchool(species, createRng(1));
+    const boids = (school as unknown as { boids: Boid[] }).boids;
+    const lastIndex = species.count - 1;
+    const raycaster = raycastAt((boids[lastIndex] as Boid).position);
+
+    expect(raycaster.intersectObject(school.mesh, false).length).toBeGreaterThan(0);
+    school.setPopulationScale(0.01); // shrinks mesh.count to 1, excluding lastIndex
+    expect(raycaster.intersectObject(school.mesh, false).length).toBe(0);
+    school.dispose();
   });
 });
 
