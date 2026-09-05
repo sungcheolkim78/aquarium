@@ -814,4 +814,34 @@ describe("FishSchool", () => {
     expect(anyFar).toBe(true);
     school.dispose();
   });
+
+  it("pushes a fish out of a coral cluster's avoidance sphere farther than ambient drift alone would", () => {
+    // Isolate the avoidance term specifically: two schools built from the same
+    // seed (so every boid starts identical) differ only in whether a cluster
+    // center is supplied, ruling out wander/cohesion/depth-bias as the cause
+    // of any distance difference.
+    const species = FISH_REGISTRY[0] as FishSpecies;
+    const clusterCenter = new Vector3(0, SCENE.floorY + SCENE.coral.avoidanceHeight, 0);
+    const withCluster = new FishSchool(species, createRng(5), "medium", [clusterCenter]);
+    const withoutCluster = new FishSchool(species, createRng(5), "medium", []);
+
+    const withBoid = (withCluster as unknown as { boids: Boid[] }).boids[0] as Boid;
+    const controlBoid = (withoutCluster as unknown as { boids: Boid[] }).boids[0] as Boid;
+    withBoid.position.set(0.3, SCENE.floorY + SCENE.coral.avoidanceHeight, 0.3);
+    controlBoid.position.set(0.3, SCENE.floorY + SCENE.coral.avoidanceHeight, 0.3);
+
+    for (let step = 0; step < 30; step += 1) {
+      withCluster.update(1 / 60, step / 60);
+      withoutCluster.update(1 / 60, step / 60);
+    }
+
+    const withDistance = Math.hypot(withBoid.position.x - clusterCenter.x, withBoid.position.z - clusterCenter.z);
+    const controlDistance = Math.hypot(
+      controlBoid.position.x - clusterCenter.x,
+      controlBoid.position.z - clusterCenter.z,
+    );
+    expect(withDistance).toBeGreaterThan(controlDistance);
+    withCluster.dispose();
+    withoutCluster.dispose();
+  });
 });

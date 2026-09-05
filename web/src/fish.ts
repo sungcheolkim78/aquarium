@@ -327,6 +327,16 @@ transformed.z += swayWave * swayWeight * swayWeight * ${(species.shape.length * 
         this.steer.add(this.scratch);
       }
 
+      this.steer.add(
+        coralAvoidanceSteer(
+          boid.position,
+          this.coralClusterCenters,
+          SCENE.floorY + SCENE.coral.avoidanceHeight,
+          SCENE.coral.avoidanceRadius,
+          this.scratch,
+        ).multiplyScalar(CONTAIN),
+      );
+
       boid.velocity.addScaledVector(this.steer, dt);
       const currentSpeed = boid.velocity.length();
       if (currentSpeed < 1e-4) {
