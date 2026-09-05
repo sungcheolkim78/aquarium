@@ -404,9 +404,9 @@ export function estimateTriangleBudget(
   disposeMaterial(floor.material);
 
   const coral = createCoral(rng, time, profile.coral, coralClusters);
-  total += coral.geometry.getAttribute("position").count / 3;
-  coral.geometry.dispose();
-  disposeMaterial(coral.material);
+  total += coral.mesh.geometry.getAttribute("position").count / 3;
+  coral.mesh.geometry.dispose();
+  disposeMaterial(coral.mesh.material);
 
   const seaweed = createSeaweed(rng, time, profile.seaweedHeightSegments, seaweedCount);
   total += (seaweed.geometry.getAttribute("position").count / 3) * seaweed.count;

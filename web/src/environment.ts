@@ -194,6 +194,17 @@ export function createFloor(
 
 const CORAL_COLORS = ["#e2705f", "#c9558c", "#e79b3f", "#5fb7a5", "#8d6bc4"] as const;
 
+/** Deterministic cluster center placement, shared between coral rendering and fish territory/avoidance. */
+export function computeCoralClusterCenters(rng: () => number, clusterCount: number): Vector3[] {
+  const centers: Vector3[] = [];
+  for (let c = 0; c < clusterCount; c += 1) {
+    const angle = (c / clusterCount) * Math.PI * 2 + rng() * 0.35;
+    const radius = 4.5 + rng() * 8.5;
+    centers.push(new Vector3(Math.cos(angle) * radius, SCENE.floorY, Math.sin(angle) * radius));
+  }
+  return centers;
+}
+
 /**
  * `profile` sets each primitive's segment counts (SPEC §6.2); `clusterCount`
  * sets how many clusters are placed ("background object count", SPEC §6.5.4)
@@ -205,7 +216,7 @@ export function createCoral(
   profile: CoralDetailProfile = BACKGROUND_DETAIL_PROFILES.medium.coral,
   clusterCount: number = SCENE.coral.clusters,
   causticsEnabled: ToggleUniform = { value: 1 },
-): Mesh {
+): { mesh: Mesh; clusterCenters: readonly Vector3[] } {
   const parts: BufferGeometry[] = [];
   const matrix = new Matrix4();
   const quaternion = new Quaternion();
@@ -219,11 +230,11 @@ export function createCoral(
     parts.push(bake(source, matrix, color));
   };
 
+  const clusterCenters = computeCoralClusterCenters(rng, clusterCount);
   for (let c = 0; c < clusterCount; c += 1) {
-    const angle = (c / clusterCount) * Math.PI * 2 + rng() * 0.35;
-    const radius = 4.5 + rng() * 8.5;
-    const baseX = Math.cos(angle) * radius;
-    const baseZ = Math.sin(angle) * radius;
+    const center = clusterCenters[c] as Vector3;
+    const baseX = center.x;
+    const baseZ = center.z;
     const hue = CORAL_COLORS[Math.floor(rng() * CORAL_COLORS.length)] ?? CORAL_COLORS[0];
     const color = new Color(hue).multiplyScalar(0.55 + rng() * 0.3);
     const pieces = 2 + Math.floor(rng() * 3);
@@ -276,7 +287,7 @@ export function createCoral(
 
   const mesh = new Mesh(mergeBaked(parts), material);
   mesh.name = "coral";
-  return mesh;
+  return { mesh, clusterCenters };
 }
 
 /**
@@ -409,6 +420,7 @@ function createGodRays(rng: () => number): Mesh {
 /** Handle returned to the render loop. */
 export interface Environment {
   readonly group: Group;
+  readonly coralClusterCenters: readonly Vector3[];
   update(elapsed: number): void;
   /** Rebuild floor/coral/seaweed at a new detail level and/or object count (SPEC §6.5.3). */
   rebuild(detail: DetailLevel, objectCountScale: number): void;
@@ -465,7 +477,7 @@ export function createEnvironment(
   const { coralClusters, seaweedCount } = computeObjectCounts(objectCountScale);
 
   let floor = createFloor(time, profile.floorSegments, causticsEnabled);
-  let coral = createCoral(rng, time, profile.coral, coralClusters, causticsEnabled);
+  let { mesh: coral, clusterCenters } = createCoral(rng, time, profile.coral, coralClusters, causticsEnabled);
   let seaweed = createSeaweed(rng, time, profile.seaweedHeightSegments, seaweedCount);
   const godRays = createGodRays(rng);
 
@@ -475,6 +487,7 @@ export function createEnvironment(
 
   return {
     group,
+    coralClusterCenters: clusterCenters,
     update(elapsed: number): void {
       time.value = elapsed;
       // Barely perceptible drift of the light shafts.
@@ -486,16 +499,17 @@ export function createEnvironment(
       const counts = computeObjectCounts(nextObjectCountScale);
 
       const nextFloor = createFloor(time, nextProfile.floorSegments, causticsEnabled);
-      const nextCoral = createCoral(rng, time, nextProfile.coral, counts.coralClusters, causticsEnabled);
+      const nextCoralResult = createCoral(rng, time, nextProfile.coral, counts.coralClusters, causticsEnabled);
       const nextSeaweed = createSeaweed(rng, time, nextProfile.seaweedHeightSegments, counts.seaweedCount);
 
-      group.add(nextFloor, nextCoral, nextSeaweed);
+      group.add(nextFloor, nextCoralResult.mesh, nextSeaweed);
       disposeMesh(floor);
       disposeMesh(coral);
       disposeMesh(seaweed);
 
       floor = nextFloor;
-      coral = nextCoral;
+      coral = nextCoralResult.mesh;
+      clusterCenters = nextCoralResult.clusterCenters;
       seaweed = nextSeaweed;
     },
     setLighting(nextIntensityScale: number, caustics: boolean): void {

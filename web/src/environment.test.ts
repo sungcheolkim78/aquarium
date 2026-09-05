@@ -4,12 +4,15 @@
  */
 
 import { describe, expect, it } from "vitest";
+import { Scene } from "three";
 
 import { BACKGROUND_DETAIL_PROFILES, SCENE, SEAWEED_COUNT } from "./config";
 import { createRng } from "./fish";
 import {
+  computeCoralClusterCenters,
   computeObjectCounts,
   createCoral,
+  createEnvironment,
   createFloor,
   createSeaweed,
   mergeBaked,
@@ -32,7 +35,7 @@ describe("background detail profiles", () => {
       triangleCount(createFloor(time, BACKGROUND_DETAIL_PROFILES.medium.floorSegments).geometry) +
       triangleCount(
         createCoral(createRng(1), time, BACKGROUND_DETAIL_PROFILES.medium.coral, SCENE.coral.clusters)
-          .geometry,
+          .mesh.geometry,
       ) +
       triangleCount(
         createSeaweed(
@@ -47,7 +50,7 @@ describe("background detail profiles", () => {
       triangleCount(createFloor(time, BACKGROUND_DETAIL_PROFILES.high.floorSegments).geometry) +
       triangleCount(
         createCoral(createRng(1), time, BACKGROUND_DETAIL_PROFILES.high.coral, SCENE.coral.clusters)
-          .geometry,
+          .mesh.geometry,
       ) +
       triangleCount(
         createSeaweed(
@@ -88,6 +91,28 @@ describe("computeObjectCounts (SPEC §6.5.4)", () => {
     });
     expect(computeObjectCounts(0.001).coralClusters).toBeGreaterThanOrEqual(1);
     expect(computeObjectCounts(0.001).seaweedCount).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe("computeCoralClusterCenters", () => {
+  it("returns one finite center per cluster, deterministic for the same seed", () => {
+    const a = computeCoralClusterCenters(createRng(3), 22);
+    const b = computeCoralClusterCenters(createRng(3), 22);
+    expect(a).toHaveLength(22);
+    for (const center of a) {
+      expect(Number.isFinite(center.x)).toBe(true);
+      expect(Number.isFinite(center.z)).toBe(true);
+    }
+    expect(a.map((c) => [c.x, c.z])).toEqual(b.map((c) => [c.x, c.z]));
+  });
+});
+
+describe("createEnvironment", () => {
+  it("exposes one coral cluster center per configured cluster", () => {
+    const scene = new Scene();
+    const env = createEnvironment(scene, createRng(3));
+    expect(env.coralClusterCenters).toHaveLength(SCENE.coral.clusters);
+    env.dispose();
   });
 });
 
