@@ -72,6 +72,43 @@ function pushFin(buffers: MeshBuffers, a: Vector3, b: Vector3, c: Vector3, color
   pushTriangle(buffers, a, c, b, color);
 }
 
+/** Deterministic hash into [0, 1) from two integers — no external RNG stream. */
+function hash2(a: number, b: number): number {
+  const s = Math.sin(a * 127.1 + b * 311.7) * 43758.5453123;
+  return s - Math.floor(s);
+}
+
+/**
+ * Per-vertex angle/radius nudge for a body ring, breaking the perfectly
+ * smooth revolve into irregular facets (SPEC §6.2.1, AC-9). Pure function of
+ * its inputs — same `(ringIndex, dirIndex, sides, seed, facetJitter)` always
+ * yields the same offset, so rebuilds/hot-reloads never reshuffle the shape.
+ * `facetJitter: 0` is the identity: v1's exact regular ring.
+ */
+export function computeFacetJitter(
+  ringIndex: number,
+  dirIndex: number,
+  sides: number,
+  seed: number,
+  facetJitter: number,
+): { angleOffset: number; radialScale: number } {
+  if (facetJitter <= 0) return { angleOffset: 0, radialScale: 1 };
+  const angleOffset =
+    (hash2(ringIndex * 7 + seed, dirIndex * 13 + 1) - 0.5) * facetJitter * ((Math.PI * 2) / sides);
+  const radialScale = 1 + (hash2(ringIndex * 3 + seed, dirIndex * 5 + 2) - 0.5) * 2 * facetJitter;
+  return { angleOffset, radialScale };
+}
+
+/**
+ * A deterministic per-species jitter seed derived from its silhouette, so two
+ * species sharing a shape still get differently placed facets.
+ */
+function facetJitterSeed(shape: FishShape): number {
+  return Math.round(
+    shape.length * 1000 + shape.height * 137 + shape.width * 29 + shape.tailSpan * 7 + shape.stripes * 3,
+  );
+}
+
 /** Cross-section vertex at `dirIndex`/`sides` around the body, an ellipse in (y, z). */
 function ringVertex(
   x: number,
@@ -79,10 +116,22 @@ function ringVertex(
   shape: FishShape,
   dirIndex: number,
   sides: number,
+  ringIndex = 0,
+  seed = 0,
+  facetJitter = 0,
 ): Vector3 {
-  const angle = (dirIndex / sides) * Math.PI * 2;
-  const dy = Math.cos(angle);
-  const dz = Math.sin(angle);
+  // Wrap dirIndex for the jitter hash so the ring's last and first vertex
+  // (dirIndex === sides vs. 0 — the same seam point) always jitter identically.
+  const { angleOffset, radialScale } = computeFacetJitter(
+    ringIndex,
+    dirIndex % sides,
+    sides,
+    seed,
+    facetJitter,
+  );
+  const angle = (dirIndex / sides) * Math.PI * 2 + angleOffset;
+  const dy = Math.cos(angle) * radialScale;
+  const dz = Math.sin(angle) * radialScale;
   return new Vector3(x, dy * (shape.height / 2) * radius, dz * (shape.width / 2) * radius);
 }
 
@@ -101,7 +150,8 @@ export function buildFishGeometry(
   const fin = new Color(palette.fin);
   const accent = new Color(palette.accent);
 
-  const { bodySegments, ringSides } = FISH_DETAIL_PROFILES[detail];
+  const { bodySegments, ringSides, facetJitter } = FISH_DETAIL_PROFILES[detail];
+  const jitterSeed = facetJitterSeed(shape);
   const buffers: MeshBuffers = { positions: [], colors: [] };
   const half = shape.length / 2;
 
@@ -123,10 +173,10 @@ export function buildFishGeometry(
     const segmentColor = stripeSegments.has(i) ? accent : body;
 
     for (let k = 0; k < ringSides; k += 1) {
-      const a = ringVertex(x0, r0, shape, k, ringSides);
-      const b = ringVertex(x0, r0, shape, k + 1, ringSides);
-      const c = ringVertex(x1, r1, shape, k + 1, ringSides);
-      const d = ringVertex(x1, r1, shape, k, ringSides);
+      const a = ringVertex(x0, r0, shape, k, ringSides, i, jitterSeed, facetJitter);
+      const b = ringVertex(x0, r0, shape, k + 1, ringSides, i, jitterSeed, facetJitter);
+      const c = ringVertex(x1, r1, shape, k + 1, ringSides, i + 1, jitterSeed, facetJitter);
+      const d = ringVertex(x1, r1, shape, k, ringSides, i + 1, jitterSeed, facetJitter);
       // Winding chosen so face normals point away from the body axis.
       pushTriangle(buffers, a, c, b, segmentColor);
       pushTriangle(buffers, a, d, c, segmentColor);

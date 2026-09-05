@@ -123,6 +123,16 @@ interface FishSpecies {
 - 배경 디테일은 (a) 바닥 `PlaneGeometry` 세그먼트 수, (b) 산호 프리미티브(`ConeGeometry`/`IcosahedronGeometry`/`TorusGeometry`/`CylinderGeometry`)의 radial/height 세그먼트 수, (c) 해초 blade의 세로 세그먼트 수를 함께 스케일한다. **클러스터·블레이드 개수(= "배경 물체 수", §6.5.4) 는 디테일 레벨과 독립적인 별도 설정이다** — 디테일은 "물체 하나의 매끈함", 물체 수는 "물체가 몇 개인가"를 의미하며 혼동하지 않는다.
 - 색상/실루엣(치수, stripes 등)은 디테일 레벨과 무관하게 동일하게 유지한다 — 디테일은 오직 폴리곤 세분화만 바꾼다.
 
+#### 6.2.1 High 디테일의 불규칙 페이싯 (`resources/images` 레퍼런스 아트 반영)
+
+세그먼트 수만 올리면 몸통이 여전히 완벽하게 매끈한 회전체로 보여, `resources/images`의 손으로 리토폴로지한 low-poly 아트(면 크기가 들쭉날쭉하고 비대칭으로 잘린 스타일)와는 느낌이 다르다. 이를 좁히기 위해 `FishDetailProfile`에 `facetJitter`(0~1) 필드를 추가한다.
+
+- `facetJitter`는 몸통 링(단면)의 각 정점에 대해, **링 인덱스·정점 인덱스·(종별로 달라지는) 형태 기반 시드**로부터 결정되는 각도 오프셋과 반지름 배율을 적용한다(순수 함수, 외부 RNG 스트림과 무관 — 같은 입력이면 항상 같은 결과, 즉 재빌드/핫리로드에도 실루엣이 흔들리지 않는다).
+- `facetJitter = 0`이면 각도 오프셋 0·반지름 배율 1로 항등(identity) — 즉 `low`/`medium`은 기존 v1과 완전히 동일한 매끈한 회전체를 유지한다(AC-1 회귀 없음).
+- `high`만 `facetJitter > 0`을 가져, 몸통 면이 불규칙하게 크고 작게 쪼개지는 느낌을 낸다. 지느러미는 이번 범위에서는 지터 대상에서 제외한다(단순 평면 지느러미가 오히려 레퍼런스 아트의 큰 단색 지느러미 느낌과 더 가깝다).
+- 왜곡 폭은 `facetJitter` 값에 비례해 상한이 걸려 있어, 실루엣이 과도하게 뾰족해지거나 몸통을 벗어나지 않는다(§9 `computeFacetJitter` 단위 테스트로 고정).
+- 참고 이미지(Dreamstime/Pixta 스톡 미리보기)는 라이선스가 없는 워터마크 이미지이므로, 실루엣·색감·재질 분위기만 참고하고 벡터/픽셀을 그대로 임포트하거나 트레이싱하지 않는다 — 기존 나비치/보라탱/자주열대어와 동일한 절차적 구현 원칙을 따른다.
+
 ### 6.3 수중 표현 (비용이 싼 셰이더 우선)
 
 | 효과 | 구현 | 비용 |
@@ -220,6 +230,7 @@ interface AquariumSettings {
 - [ ] **AC-6**: 저장된 `localStorage` 값이 JSON 파싱 불가능하거나 `schemaVersion`이 다르면 `DEFAULT_SETTINGS`가 반환된다.
 - [ ] **AC-7**: `estimateTriangleBudget`이 반환하는 최댓값 시나리오 삼각형 수는 300,000 미만이다.
 - [ ] **AC-8**: 새 어종을 `FISH_REGISTRY`에 추가하면, 설정 패널의 "물고기 종류" 목록에 코드 수정 없이 자동으로 나타난다(하드코딩 목록 금지 — 회귀 테스트로 레지스트리 길이와 렌더된 체크박스 수가 일치하는지 확인).
+- [ ] **AC-9**: `facetJitter: 0`(low/medium)은 각도 오프셋 0·반지름 배율 1을 반환해 v1과 정점 단위로 완전히 동일한 지오메트리를 만든다. `facetJitter > 0`(high)은 같은 입력에 대해 항상 같은 오프셋/배율을 반환하며(결정론), 반지름 배율은 `[1 - facetJitter, 1 + facetJitter]` 범위를 벗어나지 않는다.
 
 ## 8. 결정 로그
 
@@ -235,6 +246,7 @@ interface AquariumSettings {
 | 2026-09-05 (v1.1) | 설정값은 `localStorage`에 영속화 | 사용자 확인. 재방문 시 매번 재조정하지 않도록 |
 | 2026-09-05 (v1.1) | 디테일 레벨은 실루엣(치수)이 아닌 폴리곤 세분화만 변경 | 종별 시각 정체성(팔레트/치수)을 유지하면서 성능만 조절하기 위함 |
 | 2026-09-05 (v1.1) | "물고기 수" 전역 배율과 적응형 품질(N2)의 `populationScale`을 별개 축으로 분리 | 사용자가 설정한 의도적 개체수와, fps 저하 시 임시로 줄어드는 개체수가 서로를 덮어쓰면 안 됨 — 둘은 곱해서 최종 인스턴스 활성 수를 결정 |
+| 2026-09-05 (v1.1) | `resources/images` 레퍼런스 아트는 실루엣/색감만 참고하고, High 디테일의 불규칙 페이싯은 시드 기반 결정론적 함수(`computeFacetJitter`)로 절차적 구현 | 참고 이미지가 워터마크 붙은 라이선스 없는 스톡 미리보기라 벡터/픽셀을 그대로 임포트할 수 없음. 기존 나비치/보라탱/자주열대어와 동일한 "참고만, 절차적 구현" 원칙 유지 + 프로젝트의 에셋-프리 아키텍처(N4) 준수 |
 
 ## 9. 테스트 전략 (TDD)
 
@@ -248,6 +260,7 @@ interface AquariumSettings {
 | 디바운스 리빌드 스케줄러 | `settings.test.ts` 또는 `settingsPanel.test.ts` | AC-5. vitest fake timers로 연속 입력 시 리빌드 콜백이 1회만 호출되는지 |
 | 삼각형 예산 추정 | `settings.test.ts` (또는 `budget.test.ts`) | AC-7. `estimateTriangleBudget(MAX_SETTINGS)` < 300,000 |
 | 설정 패널 ↔ 레지스트리 동기화 | `settingsPanel.test.ts` (신규, DOM 없이 순수 함수로 분리 가능하면 그렇게) | AC-8. 레지스트리 종 수만큼 체크박스 항목이 생성되는지(가능하면 DOM 렌더링 함수를 순수 함수로 분리해 jsdom 없이 테스트) |
+| High 디테일의 불규칙 페이싯(`computeFacetJitter`) | `fish.test.ts` 확장 | AC-9. `facetJitter: 0` → 항등(각도 오프셋 0, 반지름 배율 1); `facetJitter > 0` → 결정론(같은 입력 → 같은 출력)이면서 반지름 배율이 `[1-facetJitter, 1+facetJitter]`를 벗어나지 않는지; `medium` 지오메트리가 v1과 정점 단위로 완전히 동일한지(회귀) |
 
 - 기존 `fish.test.ts`(steering/centroid/containment)는 변경 없이 그대로 유지 — 회귀 방지.
 - 렌더 루프(`main.ts`)와 실제 셰이더 픽셀 결과는 자동 테스트 대상에서 제외하고, 구현 완료 후 `npm run build && npm run preview`로 육안 확인 + `window.__aq`로 draw call/triangle 수 수동 확인한다.

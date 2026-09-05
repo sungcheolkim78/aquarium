@@ -18,16 +18,25 @@ export interface FishDetailProfile {
   readonly bodySegments: number;
   /** Number of vertices around each ring's cross-section. */
   readonly ringSides: number;
+  /**
+   * 0 = perfectly regular ring (v1 shape). >0 nudges each ring vertex's angle
+   * and radius by a deterministic per-vertex amount, breaking the smooth
+   * revolve into the irregular, hand-triangulated facets seen in the
+   * `resources/images` reference art (SPEC §6.2.1). Must be 0 at `medium` —
+   * it is the exact v1 baseline (AC-1).
+   */
+  readonly facetJitter: number;
 }
 
 /**
  * `medium` reproduces the exact v1 baseline (~50 triangles/fish). `high` targets
- * +150% (~2.5x) triangles per SPEC §6.2/AC-2; `low` trims it down for weak devices.
+ * +150% (~2.5x) triangles per SPEC §6.2/AC-2, plus facet jitter (§6.2.1); `low`
+ * trims segment count down for weak devices.
  */
 export const FISH_DETAIL_PROFILES: Record<DetailLevel, FishDetailProfile> = {
-  low: { bodySegments: 3, ringSides: 4 },
-  medium: { bodySegments: 5, ringSides: 4 },
-  high: { bodySegments: 10, ringSides: 6 },
+  low: { bodySegments: 3, ringSides: 4, facetJitter: 0 },
+  medium: { bodySegments: 5, ringSides: 4, facetJitter: 0 },
+  high: { bodySegments: 10, ringSides: 6, facetJitter: 0.16 },
 };
 
 /** Segment/subdivision counts for one procedural coral primitive kind. */
