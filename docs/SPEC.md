@@ -222,15 +222,15 @@ interface AquariumSettings {
 
 ## 7. 수용 기준 (Acceptance Criteria) — v1.1
 
-- [ ] **AC-1**: `DEFAULT_SETTINGS`로 렌더링한 화면은 v1(현재 프로덕션)과 시각적으로 동일하다 — 즉 Medium 디테일 수치가 기존 지오메트리 생성식과 동일한 출력을 낸다 (회귀 테스트: 기존 `buildFishGeometry` 관련 테스트가 `detail: "medium"` 하드코딩 시 그대로 통과).
-- [ ] **AC-2**: `buildFishGeometry(shape, palette, "high")`가 생성하는 삼각형 수는 `buildFishGeometry(shape, palette, "medium")` 대비 2.3~2.7배(2.5배 ±10%) 범위에 든다.
-- [ ] **AC-3**: 배경 전체(바닥+산호+해초, 광선 제외 — 광선은 삼각형 수가 미미해 디테일 스케일 대상에서 제외 가능)의 "high" 삼각형 수는 "medium" 대비 2.0~2.5배(2.25배 ±10%) 범위에 든다.
+- [x] **AC-1**: `DEFAULT_SETTINGS`로 렌더링한 화면은 v1(현재 프로덕션)과 시각적으로 동일하다 — 즉 Medium 디테일 수치가 기존 지오메트리 생성식과 동일한 출력을 낸다 (회귀 테스트: 기존 `buildFishGeometry` 관련 테스트가 `detail: "medium"` 하드코딩 시 그대로 통과).
+- [x] **AC-2**: `buildFishGeometry(shape, palette, "high")`가 생성하는 삼각형 수는 `buildFishGeometry(shape, palette, "medium")` 대비 2.3~2.7배(2.5배 ±10%) 범위에 든다.
+- [x] **AC-3**: 배경 전체(바닥+산호+해초, 광선 제외 — 광선은 삼각형 수가 미미해 디테일 스케일 대상에서 제외 가능)의 "high" 삼각형 수는 "medium" 대비 2.0~2.5배(2.25배 ±10%) 범위에 든다.
 - [x] **AC-4**: 설정 패널에서 종 체크박스를 끄면 다음 프레임 내에 해당 종이 화면에서 사라진다. `InstancedMesh.visible = false`는 Three.js 렌더 목록에서 해당 메시를 완전히 제외하므로, `window.__aq`의 draw call 수와 triangle 수가 모두 그 종만큼 감소한다(실측 확인, 2026-09-05).
-- [ ] **AC-5**: 슬라이더를 빠르게 여러 번 움직여도 리빌드는 조작이 멈춘 뒤 1회만 발생한다(디바운스 검증 — fake timer 기반 단위 테스트).
-- [ ] **AC-6**: 저장된 `localStorage` 값이 JSON 파싱 불가능하거나 `schemaVersion`이 다르면 `DEFAULT_SETTINGS`가 반환된다.
-- [ ] **AC-7**: `estimateTriangleBudget`이 반환하는 최댓값 시나리오 삼각형 수는 300,000 미만이다.
-- [ ] **AC-8**: 새 어종을 `FISH_REGISTRY`에 추가하면, 설정 패널의 "물고기 종류" 목록에 코드 수정 없이 자동으로 나타난다(하드코딩 목록 금지 — 회귀 테스트로 레지스트리 길이와 렌더된 체크박스 수가 일치하는지 확인).
-- [ ] **AC-9**: `facetJitter: 0`(low/medium)은 각도 오프셋 0·반지름 배율 1을 반환해 v1과 정점 단위로 완전히 동일한 지오메트리를 만든다. `facetJitter > 0`(high)은 같은 입력에 대해 항상 같은 오프셋/배율을 반환하며(결정론), 반지름 배율은 `[1 - facetJitter, 1 + facetJitter]` 범위를 벗어나지 않는다.
+- [x] **AC-5**: 슬라이더를 빠르게 여러 번 움직여도 리빌드는 조작이 멈춘 뒤 1회만 발생한다(디바운스 검증 — fake timer 기반 단위 테스트).
+- [x] **AC-6**: 저장된 `localStorage` 값이 JSON 파싱 불가능하거나 `schemaVersion`이 다르면 `DEFAULT_SETTINGS`가 반환된다.
+- [x] **AC-7**: `estimateTriangleBudget`이 반환하는 최댓값 시나리오 삼각형 수는 300,000 미만이다.
+- [ ] **AC-8**: 새 어종을 `FISH_REGISTRY`에 추가하면, 설정 패널의 "물고기 종류" 목록에 코드 수정 없이 자동으로 나타난다(하드코딩 목록 금지 — 회귀 테스트로 레지스트리 길이와 렌더된 체크박스 수가 일치하는지 확인). **미검증**: `settingsPanel.ts`는 자동 테스트에서 제외되어 있어(육안 검증 대상, §9) 이 AC를 고정하는 테스트가 없다. 검증하려면 DOM 렌더링 로직 중 "레지스트리 → 체크박스 개수"만 순수 함수로 분리해 jsdom 없이 테스트하거나, 최소한 `npm run preview`에서 레지스트리 길이와 렌더된 체크박스 수를 육안 대조한다.
+- [x] **AC-9**: `facetJitter: 0`(low/medium)은 각도 오프셋 0·반지름 배율 1을 반환해 v1과 정점 단위로 완전히 동일한 지오메트리를 만든다. `facetJitter > 0`(high)은 같은 입력에 대해 항상 같은 오프셋/배율을 반환하며(결정론), 반지름 배율은 `[1 - facetJitter, 1 + facetJitter]` 범위를 벗어나지 않는다.
 
 ## 8. 결정 로그
 
