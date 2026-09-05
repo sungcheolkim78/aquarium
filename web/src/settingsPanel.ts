@@ -7,7 +7,9 @@
  */
 
 import type { AquariumSettings, DetailLevel, FishSpecies } from "./config";
+import { DEFAULT_SETTINGS, MOOD_PRESETS, type PresetId } from "./config";
 import {
+  matchingPresetId,
   withBackgroundDetail,
   withBackgroundObjectCountScale,
   withBubblesDensityScale,
@@ -16,6 +18,7 @@ import {
   withFishCountScale,
   withFishDetail,
   withLightingIntensityScale,
+  withPreset,
   withSpeciesEnabled,
 } from "./settings";
 
@@ -135,6 +138,41 @@ function checkboxRow(
   return row;
 }
 
+function presetButtonRow(
+  current: AquariumSettings,
+  onPick: (presetId: PresetId) => void,
+  onReset: () => void,
+  cleanups: (() => void)[],
+): HTMLElement {
+  const row = document.createElement("div");
+  row.className = "settings-panel__presets";
+  const active = matchingPresetId(current);
+
+  for (const id of Object.keys(MOOD_PRESETS) as PresetId[]) {
+    const preset = MOOD_PRESETS[id];
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "settings-panel__preset";
+    button.textContent = preset.label;
+    button.setAttribute("aria-pressed", active === id ? "true" : "false");
+    const onClick = (): void => onPick(id);
+    button.addEventListener("click", onClick);
+    cleanups.push(() => button.removeEventListener("click", onClick));
+    row.append(button);
+  }
+
+  const reset = document.createElement("button");
+  reset.type = "button";
+  reset.className = "settings-panel__preset settings-panel__preset--reset";
+  reset.textContent = "기본값으로 되돌리기";
+  const onResetClick = (): void => onReset();
+  reset.addEventListener("click", onResetClick);
+  cleanups.push(() => reset.removeEventListener("click", onResetClick));
+  row.append(reset);
+
+  return row;
+}
+
 /** Build the settings panel form. `registry` drives the species list (AC-8). */
 export function createSettingsPanel(
   registry: readonly FishSpecies[],
@@ -153,6 +191,17 @@ export function createSettingsPanel(
     current = next;
     callbacks.onChange(current);
   };
+
+  // 분위기 프리셋 -------------------------------------------------------------
+  const mood = section("분위기");
+  mood.body.append(
+    presetButtonRow(
+      current,
+      (presetId) => emit(withPreset(current, presetId)),
+      () => emit(DEFAULT_SETTINGS),
+      cleanups,
+    ),
+  );
 
   // 물고기 종류 -------------------------------------------------------------
   const species = section("물고기 종류");
@@ -269,6 +318,7 @@ export function createSettingsPanel(
   );
 
   panel.append(
+    mood.section,
     species.section,
     fishDetail.section,
     fishCount.section,

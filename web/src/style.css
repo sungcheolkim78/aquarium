@@ -224,6 +224,31 @@ body {
   gap: 1rem;
 }
 
+.settings-panel__presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.settings-panel__preset {
+  font: inherit;
+  color: inherit;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  padding: 0.35rem 0.9rem;
+  cursor: pointer;
+}
+
+.settings-panel__preset[aria-pressed="true"] {
+  background: rgba(255, 255, 255, 0.22);
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+.settings-panel__preset--reset {
+  opacity: 0.75;
+}
+
 .settings-panel__radio,
 .settings-panel__checkbox {
   display: flex;
