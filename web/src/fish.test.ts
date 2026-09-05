@@ -918,4 +918,40 @@ describe("FishSchool", () => {
     expect(Math.abs(boid.position.x)).toBeLessThanOrEqual(SCENE.bounds.x);
     school.dispose();
   });
+
+  it("gives a rhythm-amplitude species more speed variation than the same species with no rhythm", () => {
+    // Ambient forces (wander, contain) already make speed wobble a little
+    // frame to frame, so an absolute variance threshold would pass even
+    // without any rhythm code. Compare against a same-seed, rhythmless
+    // control instead, isolating the rhythm term specifically.
+    const turtle = FISH_REGISTRY.find((species) => species.id === "green-sea-turtle") as FishSpecies;
+    expect(turtle.behavior.rhythmAmplitude).toBeGreaterThan(0);
+    const flat: FishSpecies = { ...turtle, behavior: { ...turtle.behavior, rhythmAmplitude: 0 } };
+
+    const rhythmic = new FishSchool(turtle, createRng(8));
+    const control = new FishSchool(flat, createRng(8));
+    const rhythmicBoid = (rhythmic as unknown as { boids: Boid[] }).boids[0] as Boid;
+    const controlBoid = (control as unknown as { boids: Boid[] }).boids[0] as Boid;
+
+    // Warm up first so each school's own spawn-transient (e.g. an initial
+    // depth-bias correction) has already settled before sampling variation.
+    for (let step = 0; step < 120; step += 1) {
+      rhythmic.update(1 / 60, step / 60);
+      control.update(1 / 60, step / 60);
+    }
+
+    const rhythmicSpeeds: number[] = [];
+    const controlSpeeds: number[] = [];
+    for (let step = 120; step < 420; step += 1) {
+      rhythmic.update(1 / 60, step / 60);
+      control.update(1 / 60, step / 60);
+      rhythmicSpeeds.push(rhythmicBoid.velocity.length());
+      controlSpeeds.push(controlBoid.velocity.length());
+    }
+    rhythmic.dispose();
+    control.dispose();
+
+    const spread = (speeds: number[]): number => Math.max(...speeds) - Math.min(...speeds);
+    expect(spread(rhythmicSpeeds)).toBeGreaterThan(spread(controlSpeeds));
+  });
 });

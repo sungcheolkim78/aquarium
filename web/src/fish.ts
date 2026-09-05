@@ -279,7 +279,8 @@ transformed.z += swayWave * swayWeight * swayWeight * ${(species.shape.length * 
       this.writeMatrices();
       return;
     }
-    const { speed, schooling, territoryStrength, depthPreference, maxTurnRate } = this.species.behavior;
+    const { speed, schooling, territoryStrength, depthPreference, maxTurnRate, rhythmAmplitude, rhythmFrequency } =
+      this.species.behavior;
     const active = this.mesh.count;
     const school = this.boids.slice(0, active);
     if (schooling) computeCentroid(school, this.centroid);
@@ -360,7 +361,9 @@ transformed.z += swayWave * swayWeight * swayWeight * ${(species.shape.length * 
 
       boid.velocity.copy(this.turnedDirection).multiplyScalar(Math.max(desiredSpeed, 1e-4));
       const currentSpeed = boid.velocity.length();
-      boid.velocity.multiplyScalar(1 + (speed / currentSpeed - 1) * Math.min(1, dt * 1.8));
+      const targetSpeed =
+        speed * rhythmSpeedScale(elapsed, boid.phase, rhythmAmplitude ?? 0, rhythmFrequency ?? 0);
+      boid.velocity.multiplyScalar(1 + (targetSpeed / currentSpeed - 1) * Math.min(1, dt * 1.8));
       boid.position.addScaledVector(boid.velocity, dt);
     }
 
