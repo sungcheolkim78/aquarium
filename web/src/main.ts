@@ -7,10 +7,12 @@ import "./style.css";
 
 import { Clock, Color, PerspectiveCamera, Scene, Vector3, WebGLRenderer } from "three";
 
-import { SCENE } from "./config";
+import { FISH_REGISTRY, SCENE, type AquariumSettings } from "./config";
 import { createEnvironment } from "./environment";
-import { createRng, createSchools } from "./fish";
+import { createRng, createSchools, type FishSchool } from "./fish";
 import { createBubbles } from "./particles";
+import { debounce, loadSettings, saveSettings } from "./settings";
+import { createSettingsPanel } from "./settingsPanel";
 import { createUi } from "./ui";
 
 declare global {
@@ -36,13 +38,12 @@ function boot(): void {
     throw new Error("aquarium: #scene canvas or #overlay container is missing");
   }
 
-  const ui = createUi(overlay);
+  let settings: AquariumSettings = loadSettings(window.localStorage);
 
   let renderer: WebGLRenderer;
   try {
     renderer = new WebGLRenderer({ canvas, antialias: true, powerPreference: "high-performance" });
   } catch (error) {
-    ui.dispose();
     fail(overlay, "이 브라우저에서는 WebGL을 사용할 수 없어 아쿠아리움을 열 수 없습니다.");
     console.error("aquarium: WebGL renderer unavailable", error);
     return;
@@ -65,11 +66,85 @@ function boot(): void {
   const target = new Vector3(0, SCENE.floorY + 3.4, 0);
 
   const rng = createRng(0x5eed_a17c);
-  const environment = createEnvironment(scene, rng);
-  const schools = createSchools(undefined, rng);
+  const environment = createEnvironment(scene, rng, {
+    detail: settings.background.detail,
+    objectCountScale: settings.background.objectCountScale,
+    lightingIntensityScale: settings.lighting.intensityScale,
+    caustics: settings.lighting.caustics,
+  });
+  const schools = createSchools(undefined, rng, {
+    detail: settings.fish.detail,
+    countScale: settings.fish.countScale,
+    enabledSpecies: settings.fish.enabledSpecies,
+  });
+  const schoolsById = new Map<string, FishSchool>(schools.map((school) => [school.species.id, school]));
   for (const school of schools) school.addTo(scene);
   const bubbles = createBubbles(rng);
+  bubbles.setEnabled(settings.bubbles.enabled);
   scene.add(bubbles.points);
+
+  // Adaptive quality (N2) and the user's own settings each scale fish
+  // population/bubble density independently; the two multiply together.
+  let qualityPopulationScale = 1;
+  let qualityBubbleScale = 1;
+  const applyBubbleDensity = (): void => {
+    bubbles.setDensityScale(settings.bubbles.densityScale * qualityBubbleScale);
+  };
+  applyBubbleDensity();
+
+  const rebuildFishDetail = debounce((detail: AquariumSettings["fish"]["detail"]): void => {
+    for (const school of schools) school.rebuildGeometry(detail);
+  }, 150);
+
+  const rebuildFishCount = debounce((countScale: number): void => {
+    for (const school of schools) {
+      school.rebuildInstances(countScale);
+      school.setPopulationScale(qualityPopulationScale);
+    }
+  }, 150);
+
+  const rebuildBackground = debounce(
+    (detail: AquariumSettings["background"]["detail"], objectCountScale: number): void => {
+      environment.rebuild(detail, objectCountScale);
+    },
+    150,
+  );
+
+  const settingsPanel = createSettingsPanel(FISH_REGISTRY, settings, {
+    onChange(next: AquariumSettings): void {
+      const prev = settings;
+      settings = next;
+      saveSettings(next, window.localStorage);
+
+      if (prev.fish.enabledSpecies !== next.fish.enabledSpecies) {
+        for (const species of FISH_REGISTRY) {
+          if (prev.fish.enabledSpecies[species.id] === next.fish.enabledSpecies[species.id]) continue;
+          schoolsById.get(species.id)?.setVisible(next.fish.enabledSpecies[species.id] !== false);
+        }
+      }
+      if (prev.fish.detail !== next.fish.detail) rebuildFishDetail(next.fish.detail);
+      if (prev.fish.countScale !== next.fish.countScale) rebuildFishCount(next.fish.countScale);
+
+      if (
+        prev.background.detail !== next.background.detail ||
+        prev.background.objectCountScale !== next.background.objectCountScale
+      ) {
+        rebuildBackground(next.background.detail, next.background.objectCountScale);
+      }
+
+      if (
+        prev.lighting.intensityScale !== next.lighting.intensityScale ||
+        prev.lighting.caustics !== next.lighting.caustics
+      ) {
+        environment.setLighting(next.lighting.intensityScale, next.lighting.caustics);
+      }
+
+      if (prev.bubbles.enabled !== next.bubbles.enabled) bubbles.setEnabled(next.bubbles.enabled);
+      if (prev.bubbles.densityScale !== next.bubbles.densityScale) applyBubbleDensity();
+    },
+  });
+
+  const ui = createUi(overlay, { settingsPanel: settingsPanel.element });
 
   const onResize = (): void => {
     camera.aspect = window.innerWidth / window.innerHeight;
@@ -98,8 +173,10 @@ function boot(): void {
       return;
     }
     if (downgradeStep === 2) {
-      for (const school of schools) school.setPopulationScale(SCENE.quality.populationScale);
-      bubbles.setDensityScale(0.6);
+      qualityPopulationScale = SCENE.quality.populationScale;
+      qualityBubbleScale = 0.6;
+      for (const school of schools) school.setPopulationScale(qualityPopulationScale);
+      applyBubbleDensity();
     }
   };
 
@@ -169,6 +246,7 @@ function boot(): void {
     bubbles.dispose();
     environment.dispose();
     ui.dispose();
+    settingsPanel.dispose();
     renderer.dispose();
   });
 }

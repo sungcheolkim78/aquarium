@@ -127,6 +127,45 @@ describe("buildFishGeometry", () => {
     }
   });
 
+  it("defaults to medium detail, matching the exact v1 baseline (AC-1)", () => {
+    const species = FISH_REGISTRY[0] as FishSpecies;
+    const withoutDetail = buildFishGeometry(species.shape, species.palette);
+    const withMedium = buildFishGeometry(species.shape, species.palette, "medium");
+    expect(withoutDetail.getAttribute("position").count).toBe(
+      withMedium.getAttribute("position").count,
+    );
+    withoutDetail.dispose();
+    withMedium.dispose();
+  });
+
+  it("orders low <= medium <= high triangle counts", () => {
+    for (const species of FISH_REGISTRY) {
+      const low = buildFishGeometry(species.shape, species.palette, "low");
+      const medium = buildFishGeometry(species.shape, species.palette, "medium");
+      const high = buildFishGeometry(species.shape, species.palette, "high");
+      const tris = (g: typeof low): number => g.getAttribute("position").count / 3;
+      expect(tris(low)).toBeLessThanOrEqual(tris(medium));
+      expect(tris(medium)).toBeLessThanOrEqual(tris(high));
+      low.dispose();
+      medium.dispose();
+      high.dispose();
+    }
+  });
+
+  it("scales high detail to ~2.5x (+150%) of medium, within 2.3~2.7x (AC-2)", () => {
+    for (const species of FISH_REGISTRY) {
+      const medium = buildFishGeometry(species.shape, species.palette, "medium");
+      const high = buildFishGeometry(species.shape, species.palette, "high");
+      const mediumTris = medium.getAttribute("position").count / 3;
+      const highTris = high.getAttribute("position").count / 3;
+      const ratio = highTris / mediumTris;
+      expect(ratio).toBeGreaterThanOrEqual(2.3);
+      expect(ratio).toBeLessThanOrEqual(2.7);
+      medium.dispose();
+      high.dispose();
+    }
+  });
+
   it("paints accent stripes only for striped species", () => {
     const clownfish = FISH_REGISTRY[0] as FishSpecies;
     expect(clownfish.shape.stripes).toBeGreaterThan(0);
@@ -223,6 +262,46 @@ describe("FishSchool", () => {
       expect(y).toBeGreaterThanOrEqual(SCENE.floorY);
       expect(y).toBeLessThanOrEqual(ceilingY);
     }
+    school.dispose();
+  });
+
+  it("toggles mesh visibility without touching instance count (species on/off, AC-4)", () => {
+    const species = FISH_REGISTRY[0] as FishSpecies;
+    const school = new FishSchool(species, createRng(1));
+    expect(school.mesh.visible).toBe(true);
+    school.setVisible(false);
+    expect(school.mesh.visible).toBe(false);
+    expect(school.visibleCount).toBe(species.count);
+    school.setVisible(true);
+    expect(school.mesh.visible).toBe(true);
+    school.dispose();
+  });
+
+  it("rebuilds its geometry in place at a new detail level", () => {
+    const species = FISH_REGISTRY[0] as FishSpecies;
+    const school = new FishSchool(species, createRng(1));
+    const mediumTris = school.mesh.geometry.getAttribute("position").count / 3;
+    school.rebuildGeometry("high");
+    const highTris = school.mesh.geometry.getAttribute("position").count / 3;
+    expect(highTris).toBeGreaterThan(mediumTris);
+    // Per-instance sway phase attribute must survive the geometry swap.
+    expect(school.mesh.geometry.getAttribute("aPhase").count).toBe(species.count);
+    school.dispose();
+  });
+
+  it("rebuilds its instance capacity at a new count scale", () => {
+    const species = FISH_REGISTRY[0] as FishSpecies;
+    const school = new FishSchool(species, createRng(1));
+    school.rebuildInstances(1.5);
+    const grown = Math.round(species.count * 1.5);
+    expect(school.mesh.count).toBe(grown);
+    expect(school.visibleCount).toBe(grown);
+
+    school.rebuildInstances(0.5);
+    const shrunk = Math.round(species.count * 0.5);
+    expect(school.mesh.count).toBe(shrunk);
+    for (let step = 0; step < 30; step += 1) school.update(1 / 60, step / 60);
+    for (const value of school.mesh.instanceMatrix.array) expect(Number.isFinite(value)).toBe(true);
     school.dispose();
   });
 

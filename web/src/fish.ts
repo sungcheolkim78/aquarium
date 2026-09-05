@@ -20,7 +20,14 @@ import {
   type Scene,
 } from "three";
 
-import { FISH_REGISTRY, SCENE, type FishShape, type FishSpecies } from "./config";
+import {
+  FISH_DETAIL_PROFILES,
+  FISH_REGISTRY,
+  SCENE,
+  type DetailLevel,
+  type FishShape,
+  type FishSpecies,
+} from "./config";
 
 /** Fish geometry is modelled nose-first along +X. */
 export const FORWARD = new Vector3(1, 0, 0);
@@ -36,17 +43,6 @@ export function createRng(seed: number): () => number {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
-
-/** Cross-section directions (y, z) walked counter-clockwise around the body. */
-const RING_DIRS: readonly (readonly [number, number])[] = [
-  [1, 0],
-  [0, 1],
-  [-1, 0],
-  [0, -1],
-];
-
-/** Number of body segments; 5 keeps the silhouette faceted and cheap. */
-const BODY_SEGMENTS = 5;
 
 /** Radius profile along the body: widest just behind the head. */
 function bodyRadius(t: number): number {
@@ -76,46 +72,61 @@ function pushFin(buffers: MeshBuffers, a: Vector3, b: Vector3, c: Vector3, color
   pushTriangle(buffers, a, c, b, color);
 }
 
-function ringVertex(x: number, radius: number, shape: FishShape, dirIndex: number): Vector3 {
-  const dir = RING_DIRS[dirIndex % RING_DIRS.length];
-  const [dy, dz] = dir ?? [1, 0];
+/** Cross-section vertex at `dirIndex`/`sides` around the body, an ellipse in (y, z). */
+function ringVertex(
+  x: number,
+  radius: number,
+  shape: FishShape,
+  dirIndex: number,
+  sides: number,
+): Vector3 {
+  const angle = (dirIndex / sides) * Math.PI * 2;
+  const dy = Math.cos(angle);
+  const dz = Math.sin(angle);
   return new Vector3(x, dy * (shape.height / 2) * radius, dz * (shape.width / 2) * radius);
 }
 
 /**
  * Build a faceted fish body plus caudal, dorsal and pectoral fins.
- * Roughly 50 triangles per species — 40 fish stay far under the N1 budget.
+ * `detail` (SPEC §6.2) selects the body's ring/segment subdivision: `medium`
+ * (default) reproduces the exact v1 shape at ~50 triangles/species; `high`
+ * targets ~2.5x that (AC-2).
  */
-export function buildFishGeometry(shape: FishShape, palette: FishSpecies["palette"]): BufferGeometry {
+export function buildFishGeometry(
+  shape: FishShape,
+  palette: FishSpecies["palette"],
+  detail: DetailLevel = "medium",
+): BufferGeometry {
   const body = new Color(palette.body);
   const fin = new Color(palette.fin);
   const accent = new Color(palette.accent);
 
+  const { bodySegments, ringSides } = FISH_DETAIL_PROFILES[detail];
   const buffers: MeshBuffers = { positions: [], colors: [] };
   const half = shape.length / 2;
 
   const stripeSegments = new Set<number>();
   if (shape.stripes > 0) {
-    const stride = BODY_SEGMENTS / (shape.stripes + 1);
+    const stride = bodySegments / (shape.stripes + 1);
     for (let s = 1; s <= shape.stripes; s += 1) {
-      stripeSegments.add(Math.min(BODY_SEGMENTS - 1, Math.round(s * stride) - 1));
+      stripeSegments.add(Math.min(bodySegments - 1, Math.round(s * stride) - 1));
     }
   }
 
-  for (let i = 0; i < BODY_SEGMENTS; i += 1) {
-    const t0 = i / BODY_SEGMENTS;
-    const t1 = (i + 1) / BODY_SEGMENTS;
+  for (let i = 0; i < bodySegments; i += 1) {
+    const t0 = i / bodySegments;
+    const t1 = (i + 1) / bodySegments;
     const x0 = half - shape.length * t0;
     const x1 = half - shape.length * t1;
     const r0 = bodyRadius(t0);
     const r1 = bodyRadius(t1);
     const segmentColor = stripeSegments.has(i) ? accent : body;
 
-    for (let k = 0; k < RING_DIRS.length; k += 1) {
-      const a = ringVertex(x0, r0, shape, k);
-      const b = ringVertex(x0, r0, shape, k + 1);
-      const c = ringVertex(x1, r1, shape, k + 1);
-      const d = ringVertex(x1, r1, shape, k);
+    for (let k = 0; k < ringSides; k += 1) {
+      const a = ringVertex(x0, r0, shape, k, ringSides);
+      const b = ringVertex(x0, r0, shape, k + 1, ringSides);
+      const c = ringVertex(x1, r1, shape, k + 1, ringSides);
+      const d = ringVertex(x1, r1, shape, k, ringSides);
       // Winding chosen so face normals point away from the body axis.
       pushTriangle(buffers, a, c, b, segmentColor);
       pushTriangle(buffers, a, d, c, segmentColor);
@@ -205,11 +216,12 @@ const WANDER = 0.55;
 /** One species' school: geometry, instanced mesh, and its steering update. */
 export class FishSchool {
   readonly species: FishSpecies;
-  readonly mesh: InstancedMesh;
+  mesh: InstancedMesh;
 
   private readonly boids: Boid[] = [];
-  private readonly geometry: BufferGeometry;
+  private geometry: BufferGeometry;
   private readonly material: MeshLambertMaterial;
+  private readonly rng: () => number;
   private readonly timeUniform = { value: 0 };
   private readonly matrix = new Matrix4();
   private readonly quaternion = new Quaternion();
@@ -218,10 +230,14 @@ export class FishSchool {
   private readonly steer = new Vector3();
   private readonly centroid = new Vector3();
   private readonly heading = new Vector3();
+  /** Current instance capacity, set by the user's "fish count" scale (SPEC §6.5.3). */
+  private capacity: number;
 
-  constructor(species: FishSpecies, rng: () => number) {
+  constructor(species: FishSpecies, rng: () => number, detail: DetailLevel = "medium") {
     this.species = species;
-    this.geometry = buildFishGeometry(species.shape, species.palette);
+    this.rng = rng;
+    this.capacity = species.count;
+    this.geometry = buildFishGeometry(species.shape, species.palette, detail);
     this.material = new MeshLambertMaterial({
       vertexColors: true,
       flatShading: true,
@@ -245,31 +261,13 @@ transformed.z += swayWave * swayWeight * swayWeight * ${(species.shape.length * 
         );
     };
 
-    this.mesh = new InstancedMesh(this.geometry, this.material, species.count);
+    this.mesh = new InstancedMesh(this.geometry, this.material, this.capacity);
     this.mesh.instanceMatrix.setUsage(DynamicDrawUsage);
     this.mesh.frustumCulled = false;
     this.mesh.name = `school:${species.id}`;
 
-    const phases = new Float32Array(species.count);
-    const radius = species.behavior.activityRadius;
-    for (let i = 0; i < species.count; i += 1) {
-      const phase = rng() * Math.PI * 2;
-      phases[i] = phase;
-      const angle = rng() * Math.PI * 2;
-      const dist = radius * (0.35 + 0.6 * rng());
-      this.boids.push({
-        position: new Vector3(
-          Math.cos(angle) * dist,
-          SCENE.floorY + 2.2 + rng() * (SCENE.bounds.y * 1.4),
-          Math.sin(angle) * dist,
-        ),
-        velocity: new Vector3(rng() - 0.5, (rng() - 0.5) * 0.25, rng() - 0.5)
-          .normalize()
-          .multiplyScalar(species.behavior.speed),
-        phase,
-      });
-    }
-    this.geometry.setAttribute("aPhase", new InstancedBufferAttribute(phases, 1));
+    for (let i = 0; i < this.capacity; i += 1) this.boids.push(this.spawnBoid());
+    this.writePhaseAttribute();
     this.writeMatrices();
   }
 
@@ -280,6 +278,11 @@ transformed.z += swayWave * swayWeight * swayWeight * ${(species.shape.length * 
 
   addTo(scene: Scene): void {
     scene.add(this.mesh);
+  }
+
+  /** Show or hide the whole species without touching its simulation state (AC-4). */
+  setVisible(visible: boolean): void {
+    this.mesh.visible = visible;
   }
 
   /** Advance the school. `dt` seconds, `elapsed` seconds since start. */
@@ -341,11 +344,60 @@ transformed.z += swayWave * swayWeight * swayWeight * ${(species.shape.length * 
     this.writeMatrices();
   }
 
-  /** Keep `Math.round(count * scale)` instances, never fewer than one. */
+  /**
+   * Keep `Math.round(capacity * scale)` instances visible, never fewer than
+   * one. `capacity` is the current instance allocation (SPEC decision log:
+   * the user's "fish count" setting and this adaptive-quality scale are
+   * independent axes that multiply together).
+   */
   setPopulationScale(scale: number): void {
-    const next = Math.max(1, Math.min(this.species.count, Math.round(this.species.count * scale)));
+    const next = Math.max(1, Math.min(this.capacity, Math.round(this.capacity * scale)));
     this.mesh.count = next;
     this.mesh.instanceMatrix.needsUpdate = true;
+  }
+
+  /** Swap the vertex geometry for a new detail level in place (SPEC §6.5.3). */
+  rebuildGeometry(detail: DetailLevel): void {
+    const next = buildFishGeometry(this.species.shape, this.species.palette, detail);
+    this.mesh.geometry = next;
+    this.geometry.dispose();
+    this.geometry = next;
+    this.writePhaseAttribute();
+  }
+
+  /**
+   * Reallocate instance capacity for a new "fish count" scale (SPEC §6.5.3).
+   * Existing boids are kept (trimmed or extended); a brand-new `InstancedMesh`
+   * replaces the old one in place in the scene graph, since instance capacity
+   * is fixed at construction time in three.js.
+   */
+  rebuildInstances(countScale: number): void {
+    const nextCapacity = Math.max(1, Math.round(this.species.count * countScale));
+    if (nextCapacity > this.boids.length) {
+      while (this.boids.length < nextCapacity) this.boids.push(this.spawnBoid());
+    } else {
+      this.boids.length = nextCapacity;
+    }
+    this.capacity = nextCapacity;
+
+    const parent = this.mesh.parent;
+    const visible = this.mesh.visible;
+    const oldMesh = this.mesh;
+
+    const next = new InstancedMesh(this.geometry, this.material, nextCapacity);
+    next.instanceMatrix.setUsage(DynamicDrawUsage);
+    next.frustumCulled = false;
+    next.name = oldMesh.name;
+    next.visible = visible;
+
+    this.mesh = next;
+    this.writeMatrices();
+
+    if (parent) {
+      parent.add(next);
+      oldMesh.removeFromParent();
+    }
+    oldMesh.dispose();
   }
 
   dispose(): void {
@@ -353,6 +405,31 @@ transformed.z += swayWave * swayWeight * swayWeight * ${(species.shape.length * 
     this.mesh.dispose();
     this.geometry.dispose();
     this.material.dispose();
+  }
+
+  private spawnBoid(): Boid {
+    const rng = this.rng;
+    const radius = this.species.behavior.activityRadius;
+    const phase = rng() * Math.PI * 2;
+    const angle = rng() * Math.PI * 2;
+    const dist = radius * (0.35 + 0.6 * rng());
+    return {
+      position: new Vector3(
+        Math.cos(angle) * dist,
+        SCENE.floorY + 2.2 + rng() * (SCENE.bounds.y * 1.4),
+        Math.sin(angle) * dist,
+      ),
+      velocity: new Vector3(rng() - 0.5, (rng() - 0.5) * 0.25, rng() - 0.5)
+        .normalize()
+        .multiplyScalar(this.species.behavior.speed),
+      phase,
+    };
+  }
+
+  private writePhaseAttribute(): void {
+    const phases = new Float32Array(this.capacity);
+    for (let i = 0; i < this.capacity; i += 1) phases[i] = this.boids[i]?.phase ?? 0;
+    this.geometry.setAttribute("aPhase", new InstancedBufferAttribute(phases, 1));
   }
 
   private writeMatrices(): void {
@@ -370,10 +447,25 @@ transformed.z += swayWave * swayWeight * swayWeight * ${(species.shape.length * 
   }
 }
 
+/** Initial settings applied while constructing a school (SPEC §6.5). */
+export interface CreateSchoolsOptions {
+  readonly detail?: DetailLevel;
+  readonly countScale?: number;
+  readonly enabledSpecies?: Readonly<Record<string, boolean>>;
+}
+
 /** Instantiate every registry species — the only place the registry is read. */
 export function createSchools(
   registry: readonly FishSpecies[] = FISH_REGISTRY,
   rng: () => number = createRng(0x5eed),
+  options: CreateSchoolsOptions = {},
 ): FishSchool[] {
-  return registry.map((species) => new FishSchool(species, rng));
+  return registry.map((species) => {
+    const school = new FishSchool(species, rng, options.detail ?? "medium");
+    if (options.countScale !== undefined && options.countScale !== 1) {
+      school.rebuildInstances(options.countScale);
+    }
+    if (options.enabledSpecies?.[species.id] === false) school.setVisible(false);
+    return school;
+  });
 }

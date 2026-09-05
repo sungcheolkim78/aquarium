@@ -49,8 +49,10 @@ function createBubbleSprite(size = 64): Texture {
 export interface BubbleField {
   readonly points: Points;
   update(dt: number, elapsed: number): void;
-  /** Draw only a fraction of the bubbles (adaptive quality, SPEC N2). */
+  /** Draw only a fraction of the bubbles (adaptive quality, SPEC N2; also user density, §6.5.3). */
   setDensityScale(scale: number): void;
+  /** Show or hide the whole bubble field (SPEC §6.5.3). */
+  setEnabled(enabled: boolean): void;
   dispose(): void;
 }
 
@@ -137,6 +139,9 @@ export function createBubbles(
     setDensityScale(scale: number): void {
       drawCount = Math.max(1, Math.min(count, Math.round(count * scale)));
       geometry.setDrawRange(0, drawCount);
+    },
+    setEnabled(enabled: boolean): void {
+      points.visible = enabled;
     },
     dispose(): void {
       points.removeFromParent();

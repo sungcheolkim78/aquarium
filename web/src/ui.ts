@@ -19,6 +19,11 @@ const SPEAKER_OFF = `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="fals
   <path d="M20.5 9.5l-5 5" />
 </svg>`;
 
+const GEAR_ICON = `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+  <circle cx="12" cy="12" r="3.2" />
+  <path d="M12 3.5v2.1M12 18.4v2.1M4.9 6.3l1.5 1.5M17.6 16.2l1.5 1.5M3.5 12h2.1M18.4 12h2.1M4.9 17.7l1.5-1.5M17.6 7.8l1.5-1.5" />
+</svg>`;
+
 /** Procedural ocean-ish ambience: looped pink noise under a swaying lowpass. */
 class AmbientAudio {
   private context: AudioContext | null = null;
@@ -134,8 +139,13 @@ export interface AquariumUi {
   dispose(): void;
 }
 
+export interface CreateUiOptions {
+  /** The settings panel's root element (SPEC F6, §6.5.1); the gear button toggles its visibility. */
+  readonly settingsPanel?: HTMLElement;
+}
+
 /** Build the overlay UI inside `root`. */
-export function createUi(root: HTMLElement): AquariumUi {
+export function createUi(root: HTMLElement, options: CreateUiOptions = {}): AquariumUi {
   root.textContent = "";
   root.classList.add("overlay");
 
@@ -186,7 +196,34 @@ export function createUi(root: HTMLElement): AquariumUi {
   };
   soundButton.addEventListener("click", onToggle);
 
-  root.append(loader, title, soundButton);
+  const controls = document.createElement("div");
+  controls.className = "controls";
+  controls.append(soundButton);
+
+  const settingsPanel = options.settingsPanel ?? null;
+  let settingsButton: HTMLButtonElement | null = null;
+  let onSettingsToggle: (() => void) | null = null;
+
+  if (settingsPanel !== null) {
+    settingsButton = document.createElement("button");
+    settingsButton.type = "button";
+    settingsButton.className = "settings-toggle";
+    settingsButton.innerHTML = GEAR_ICON;
+    settingsButton.setAttribute("aria-label", "설정 열기");
+    settingsButton.setAttribute("aria-expanded", "false");
+    settingsButton.title = "설정";
+
+    onSettingsToggle = (): void => {
+      const open = settingsPanel.classList.toggle("is-open");
+      settingsButton?.setAttribute("aria-expanded", open ? "true" : "false");
+      settingsButton?.setAttribute("aria-label", open ? "설정 닫기" : "설정 열기");
+    };
+    settingsButton.addEventListener("click", onSettingsToggle);
+    controls.append(settingsButton);
+    root.append(settingsPanel);
+  }
+
+  root.append(loader, title, controls);
 
   return {
     finishLoading(): void {
@@ -197,6 +234,9 @@ export function createUi(root: HTMLElement): AquariumUi {
     },
     dispose(): void {
       soundButton.removeEventListener("click", onToggle);
+      if (settingsButton !== null && onSettingsToggle !== null) {
+        settingsButton.removeEventListener("click", onSettingsToggle);
+      }
       audio.dispose();
       root.textContent = "";
     },

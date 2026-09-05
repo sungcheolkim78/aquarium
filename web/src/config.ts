@@ -9,6 +9,93 @@
 /** Procedural geometry builders available to the registry. */
 export type FishGeometryId = "lowpoly-fish";
 
+/** Polygon detail tier, user-selectable via the settings panel (SPEC §6.2, F7). */
+export type DetailLevel = "low" | "medium" | "high";
+
+/** Body cross-section/length subdivision counts per detail tier for fish geometry. */
+export interface FishDetailProfile {
+  /** Number of rings walked along the body length. */
+  readonly bodySegments: number;
+  /** Number of vertices around each ring's cross-section. */
+  readonly ringSides: number;
+}
+
+/**
+ * `medium` reproduces the exact v1 baseline (~50 triangles/fish). `high` targets
+ * +150% (~2.5x) triangles per SPEC §6.2/AC-2; `low` trims it down for weak devices.
+ */
+export const FISH_DETAIL_PROFILES: Record<DetailLevel, FishDetailProfile> = {
+  low: { bodySegments: 3, ringSides: 4 },
+  medium: { bodySegments: 5, ringSides: 4 },
+  high: { bodySegments: 10, ringSides: 6 },
+};
+
+/** Segment/subdivision counts for one procedural coral primitive kind. */
+export interface CoralDetailProfile {
+  readonly coneRadial: number;
+  readonly coneHeight: number;
+  readonly icosahedronDetail: number;
+  readonly torusRadial: number;
+  readonly torusTubular: number;
+  readonly cylinderRadial: number;
+  readonly cylinderHeight: number;
+}
+
+/** Background subdivision counts per detail tier (SPEC §6.2/AC-3). */
+export interface BackgroundDetailProfile {
+  /** Sea floor `PlaneGeometry` width/height segment count (square grid). */
+  readonly floorSegments: number;
+  /** Seaweed blade `PlaneGeometry` height segment count. */
+  readonly seaweedHeightSegments: number;
+  readonly coral: CoralDetailProfile;
+}
+
+/** `medium` reproduces the exact v1 baseline; `high` targets +125% (~2.25x) triangles. */
+export const BACKGROUND_DETAIL_PROFILES: Record<DetailLevel, BackgroundDetailProfile> = {
+  low: {
+    floorSegments: 18,
+    seaweedHeightSegments: 2,
+    coral: {
+      coneRadial: 5,
+      coneHeight: 1,
+      icosahedronDetail: 0,
+      torusRadial: 4,
+      torusTubular: 6,
+      cylinderRadial: 5,
+      cylinderHeight: 1,
+    },
+  },
+  medium: {
+    floorSegments: 26,
+    seaweedHeightSegments: 4,
+    coral: {
+      coneRadial: 6,
+      coneHeight: 1,
+      icosahedronDetail: 0,
+      torusRadial: 5,
+      torusTubular: 8,
+      cylinderRadial: 7,
+      cylinderHeight: 1,
+    },
+  },
+  high: {
+    floorSegments: 39,
+    seaweedHeightSegments: 9,
+    coral: {
+      coneRadial: 9,
+      coneHeight: 1,
+      icosahedronDetail: 1,
+      torusRadial: 7,
+      torusTubular: 12,
+      cylinderRadial: 9,
+      cylinderHeight: 1,
+    },
+  },
+};
+
+/** Base seaweed blade instance count at `objectCountScale: 1` (SPEC §6.5.4). */
+export const SEAWEED_COUNT = 64;
+
 /** Per-species silhouette parameters fed to the procedural geometry builder. */
 export interface FishShape {
   /** Nose-to-tail length in world units. */
@@ -117,6 +204,58 @@ export const FISH_REGISTRY: readonly FishSpecies[] = [
 /** Total number of fish requested by the registry. */
 export const totalFishCount = (registry: readonly FishSpecies[] = FISH_REGISTRY): number =>
   registry.reduce((sum, species) => sum + species.count, 0);
+
+/** User-adjustable scene configuration, persisted via `settings.ts` (SPEC §6.5.2). */
+export interface AquariumSettings {
+  readonly schemaVersion: 1;
+  readonly fish: {
+    /** Species id -> shown. Unknown ids (stale registry) are ignored. */
+    readonly enabledSpecies: Readonly<Record<string, boolean>>;
+    readonly detail: DetailLevel;
+    /** Multiplies every species' `count`. */
+    readonly countScale: number;
+  };
+  readonly background: {
+    readonly detail: DetailLevel;
+    /** Multiplies coral cluster count and seaweed instance count. */
+    readonly objectCountScale: number;
+  };
+  readonly lighting: {
+    /** Multiplies every light's base intensity. */
+    readonly intensityScale: number;
+    readonly caustics: boolean;
+  };
+  readonly bubbles: {
+    readonly enabled: boolean;
+    /** Multiplies `SCENE.bubbles.count`. */
+    readonly densityScale: number;
+  };
+}
+
+/** Clamp ranges for each numeric settings field (SPEC §6.5.2). */
+export const SETTINGS_LIMITS = {
+  fish: { countScale: { min: 0.25, max: 1.5 } },
+  background: { objectCountScale: { min: 0.5, max: 2.0 } },
+  lighting: { intensityScale: { min: 0.4, max: 1.6 } },
+  bubbles: { densityScale: { min: 0, max: 2.0 } },
+} as const;
+
+/**
+ * Matches v1 behaviour exactly: every species shown, medium detail, every
+ * multiplier at 1, caustics/bubbles on. A user who never opens the settings
+ * panel must see this and only this (SPEC §6.5.2, AC-1).
+ */
+export const DEFAULT_SETTINGS: AquariumSettings = {
+  schemaVersion: 1,
+  fish: {
+    enabledSpecies: Object.fromEntries(FISH_REGISTRY.map((species) => [species.id, true])),
+    detail: "medium",
+    countScale: 1,
+  },
+  background: { detail: "medium", objectCountScale: 1 },
+  lighting: { intensityScale: 1, caustics: true },
+  bubbles: { enabled: true, densityScale: 1 },
+};
 
 /** Scene-wide tuning tokens (palette mirrored in `style.css`). */
 export const SCENE = {
