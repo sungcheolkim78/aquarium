@@ -65,6 +65,15 @@ function boot(): void {
   );
   const target = new Vector3(0, SCENE.floorY + 3.4, 0);
 
+  const prefersReducedMotion =
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  if (prefersReducedMotion) {
+    camera.position.set(0, SCENE.camera.height, SCENE.camera.radius);
+    camera.lookAt(target);
+  }
+
   const rng = createRng(0x5eed_a17c);
   const environment = createEnvironment(scene, rng, {
     detail: settings.background.detail,
@@ -185,15 +194,17 @@ function boot(): void {
     const dt = Math.min(rawDt, 0.05);
     elapsed += dt;
 
-    const angle = Math.sin(elapsed * SCENE.camera.driftSpeed) * SCENE.camera.driftRadians;
-    camera.position.set(
-      Math.sin(angle) * SCENE.camera.radius,
-      SCENE.camera.height +
-        Math.sin(elapsed * SCENE.camera.bobSpeed) * SCENE.camera.bobAmplitude,
-      Math.cos(angle) * SCENE.camera.radius,
-    );
-    target.x = Math.sin(elapsed * 0.033) * 1.4;
-    camera.lookAt(target);
+    if (!prefersReducedMotion) {
+      const angle = Math.sin(elapsed * SCENE.camera.driftSpeed) * SCENE.camera.driftRadians;
+      camera.position.set(
+        Math.sin(angle) * SCENE.camera.radius,
+        SCENE.camera.height +
+          Math.sin(elapsed * SCENE.camera.bobSpeed) * SCENE.camera.bobAmplitude,
+        Math.cos(angle) * SCENE.camera.radius,
+      );
+      target.x = Math.sin(elapsed * 0.033) * 1.4;
+      camera.lookAt(target);
+    }
 
     environment.update(elapsed);
     for (const school of schools) school.update(dt, elapsed);
