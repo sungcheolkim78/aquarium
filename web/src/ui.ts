@@ -24,6 +24,11 @@ const GEAR_ICON = `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"
   <path d="M12 3.5v2.1M12 18.4v2.1M4.9 6.3l1.5 1.5M17.6 16.2l1.5 1.5M3.5 12h2.1M18.4 12h2.1M4.9 17.7l1.5-1.5M17.6 7.8l1.5-1.5" />
 </svg>`;
 
+const CATALOG_ICON = `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+  <path d="M4 5.5c2.2-1 4.8-1 7 0v13c-2.2-1-4.8-1-7 0z" />
+  <path d="M20 5.5c-2.2-1-4.8-1-7 0v13c2.2-1 4.8-1 7 0z" />
+</svg>`;
+
 /** Procedural ocean-ish ambience: looped pink noise under a swaying lowpass. */
 class AmbientAudio {
   private context: AudioContext | null = null;
@@ -173,6 +178,10 @@ export interface CreateUiOptions {
   readonly settingsPanel?: HTMLElement;
   /** Initial ambient-sound target volume, 0~1 (SPEC §6.7.3). Defaults to `AmbientAudio`'s own 0.16 if omitted. */
   readonly initialVolume?: number;
+  /** The species-info card's root element (§4.4 proposal); just mounted, no toggle button — it opens via fish picking or the catalog. */
+  readonly speciesCard?: HTMLElement;
+  /** The species catalog ("도감") root element (§4.4 proposal); a new button toggles its visibility. */
+  readonly speciesCatalog?: HTMLElement;
 }
 
 /** Build the overlay UI inside `root`. */
@@ -272,6 +281,30 @@ export function createUi(root: HTMLElement, options: CreateUiOptions = {}): Aqua
   for (const type of ACTIVITY_EVENTS) window.addEventListener(type, onActivity, { passive: true });
   scheduleIdleHide();
 
+  const speciesCatalog = options.speciesCatalog ?? null;
+  let catalogButton: HTMLButtonElement | null = null;
+  let onCatalogToggle: (() => void) | null = null;
+
+  if (speciesCatalog !== null) {
+    catalogButton = document.createElement("button");
+    catalogButton.type = "button";
+    catalogButton.className = "catalog-toggle";
+    catalogButton.innerHTML = CATALOG_ICON;
+    catalogButton.setAttribute("aria-label", "도감 열기");
+    catalogButton.setAttribute("aria-expanded", "false");
+    catalogButton.title = "도감";
+
+    onCatalogToggle = (): void => {
+      const open = speciesCatalog.classList.toggle("is-open");
+      catalogButton?.setAttribute("aria-expanded", open ? "true" : "false");
+      catalogButton?.setAttribute("aria-label", open ? "도감 닫기" : "도감 열기");
+      onActivity();
+    };
+    catalogButton.addEventListener("click", onCatalogToggle);
+    controls.append(catalogButton);
+    root.append(speciesCatalog);
+  }
+
   if (settingsPanel !== null) {
     settingsButton = document.createElement("button");
     settingsButton.type = "button";
@@ -292,6 +325,7 @@ export function createUi(root: HTMLElement, options: CreateUiOptions = {}): Aqua
     root.append(settingsPanel);
   }
 
+  if (options.speciesCard) root.append(options.speciesCard);
   root.append(loader, title, controls);
 
   return {
@@ -310,6 +344,9 @@ export function createUi(root: HTMLElement, options: CreateUiOptions = {}): Aqua
       soundButton.removeEventListener("click", onToggle);
       if (settingsButton !== null && onSettingsToggle !== null) {
         settingsButton.removeEventListener("click", onSettingsToggle);
+      }
+      if (catalogButton !== null && onCatalogToggle !== null) {
+        catalogButton.removeEventListener("click", onCatalogToggle);
       }
       audio.dispose();
       root.textContent = "";
