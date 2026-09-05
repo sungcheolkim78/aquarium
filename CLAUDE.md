@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-"고요한 아쿠아리움" (Quiet Aquarium) — a static, backend-free, GPU-accelerated 3D aquarium web app (Three.js + WebGL2) meant to be calming to watch. Full requirements/design rationale live in `SPEC.md` (Korean); high-level feature description is in `README.md`. All app code lives under `web/`.
+"고요한 아쿠아리움" (Quiet Aquarium) — a static, backend-free, GPU-accelerated 3D aquarium web app (Three.js + WebGL2) meant to be calming to watch. Full requirements/design rationale live in `docs/SPEC.md` (Korean); high-level feature description is in `README.md`. All app code lives under `web/`.
 
 ## Commands
 

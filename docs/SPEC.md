@@ -72,7 +72,7 @@
 ### 레포 구조
 ```
 aquarium/
-├── SPEC.md     # 본 문서
+├── docs/       # SPEC.md(본 문서), DEVELOPMENT_PROPOSAL.md 등
 ├── web/        # v1: Vite + TypeScript + Three.js 정적 앱
 └── api/        # v2: Hono API (서버 기능 확정 시)
 ```
