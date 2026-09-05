@@ -23,6 +23,13 @@ describe("creature registry", () => {
     if (!shark || shark.geometry !== "lowpoly-shark") throw new Error("shark registry entry missing");
     expect(shark.shape.dorsalFinHeight).toBeGreaterThan(0);
   });
+
+  it("includes a vertical seahorse that uses hover locomotion", () => {
+    const seahorse = FISH_REGISTRY.find((species) => species.id === "seahorse");
+    expect(seahorse).toBeDefined();
+    expect(seahorse?.geometry).toBe("lowpoly-seahorse");
+    expect(seahorse?.behavior.locomotion).toBe("hover");
+  });
 });
 
 describe("computeQualityScales", () => {

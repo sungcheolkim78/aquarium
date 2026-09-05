@@ -46,12 +46,14 @@ describe("fish registry", () => {
       "purple-tang",
       "pink-cardinalfish",
       "great-white-shark",
+      "seahorse",
     ]);
     expect(FISH_REGISTRY.slice(3).map((species) => species.label)).toEqual([
       "나비치",
       "보라탱",
       "자주열대어",
       "백상아리",
+      "해마",
     ]);
   });
 
@@ -68,20 +70,23 @@ describe("fish registry", () => {
 
   it("defines a complete, well-formed entry per species", () => {
     for (const species of FISH_REGISTRY) {
-      expect(["lowpoly-fish", "lowpoly-shark"]).toContain(species.geometry);
+      expect(["lowpoly-fish", "lowpoly-shark", "lowpoly-seahorse"]).toContain(species.geometry);
       expect(species.palette.body).toMatch(HEX);
       expect(species.palette.fin).toMatch(HEX);
       expect(species.palette.accent).toMatch(HEX);
       expect(species.behavior.speed).toBeGreaterThan(0);
-      expect(species.behavior.locomotion).toBe("swim");
+      expect(["swim", "hover"]).toContain(species.behavior.locomotion);
       expect(species.behavior.activityRadius).toBeGreaterThan(0);
       expect(species.behavior.activityRadius).toBeLessThanOrEqual(SCENE.bounds.x);
       expect(species.count).toBeGreaterThan(0);
       expect(species.shape.length).toBeGreaterThan(0);
       if (species.geometry === "lowpoly-fish") {
         expect(species.shape.stripes).toBeGreaterThanOrEqual(0);
-      } else {
+      } else if (species.geometry === "lowpoly-shark") {
         expect(species.shape.dorsalFinHeight).toBeGreaterThan(0);
+      } else {
+        expect(species.shape.snoutLength).toBeGreaterThan(0);
+        expect(species.shape.curlRadius).toBeGreaterThan(0);
       }
     }
   });
@@ -307,6 +312,31 @@ describe("buildCreatureGeometry shark variant", () => {
     expect(Math.max(...yValues)).toBeGreaterThan(shark.shape.height / 2);
     first.dispose();
     second.dispose();
+  });
+});
+
+describe("buildCreatureGeometry seahorse variant", () => {
+  it("builds a vertical, finite seahorse with a curled tail", () => {
+    const seahorse = FISH_REGISTRY.find((species) => species.geometry === "lowpoly-seahorse");
+    expect(seahorse).toBeDefined();
+    if (!seahorse) return;
+
+    const geometry = buildCreatureGeometry(seahorse, "medium");
+    const position = geometry.getAttribute("position");
+    const yValues: number[] = [];
+    const zValues: number[] = [];
+    for (let i = 0; i < position.count; i += 1) {
+      expect(Number.isFinite(position.getX(i))).toBe(true);
+      expect(Number.isFinite(position.getY(i))).toBe(true);
+      expect(Number.isFinite(position.getZ(i))).toBe(true);
+      yValues.push(position.getY(i));
+      zValues.push(position.getZ(i));
+    }
+    expect(Math.max(...yValues) - Math.min(...yValues)).toBeGreaterThan(
+      Math.max(...zValues) - Math.min(...zValues),
+    );
+    expect(Math.max(...zValues) - Math.min(...zValues)).toBeGreaterThan(0.1);
+    geometry.dispose();
   });
 });
 

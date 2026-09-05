@@ -7,7 +7,7 @@
  */
 
 /** Procedural geometry builders available to the registry. */
-export type CreatureGeometryId = "lowpoly-fish" | "lowpoly-shark";
+export type CreatureGeometryId = "lowpoly-fish" | "lowpoly-shark" | "lowpoly-seahorse";
 /** Backward-compatible name for callers that still use the fish terminology. */
 export type FishGeometryId = CreatureGeometryId;
 
@@ -130,9 +130,21 @@ export interface SharkShape {
   readonly dorsalFinHeight: number;
 }
 
+/** Silhouette parameters for a vertical seahorse body plan. */
+export interface SeahorseShape {
+  /** Overall vertical body height, also used by the shared sway shader scale. */
+  readonly length: number;
+  readonly height: number;
+  readonly width: number;
+  readonly snoutLength: number;
+  readonly curlRadius: number;
+  readonly finSpan: number;
+}
+
 export type CreatureVariant =
   | { readonly geometry: "lowpoly-fish"; readonly shape: FishShape }
-  | { readonly geometry: "lowpoly-shark"; readonly shape: SharkShape };
+  | { readonly geometry: "lowpoly-shark"; readonly shape: SharkShape }
+  | { readonly geometry: "lowpoly-seahorse"; readonly shape: SeahorseShape };
 
 interface CreatureDefinition {
   readonly id: string;
@@ -219,7 +231,7 @@ export const FISH_REGISTRY: readonly FishSpecies[] = [
     palette: { body: "#5b4fd6", fin: "#f5c11d", accent: "#cfe6ff" },
     behavior: { speed: 0.8, locomotion: "swim", schooling: false, activityRadius: 8.5 },
     shape: { length: 0.7, height: 0.52, width: 0.18, tailSpan: 0.34, stripes: 0 },
-    count: 5,
+    count: 3,
   },
   {
     // Small pink fish that darts around in a tight school (reference: poly_fish_2).
@@ -238,7 +250,23 @@ export const FISH_REGISTRY: readonly FishSpecies[] = [
     palette: { body: "#7894a5", fin: "#405563", accent: "#d9edf5" },
     behavior: { speed: 0.9, locomotion: "swim", schooling: false, activityRadius: 10.5 },
     shape: { length: 1.45, height: 0.5, width: 0.26, tailSpan: 0.62, dorsalFinHeight: 0.42 },
-    count: 4,
+    count: 2,
+  },
+  {
+    id: "seahorse",
+    label: "해마",
+    geometry: "lowpoly-seahorse",
+    palette: { body: "#d184a5", fin: "#a9587e", accent: "#f4c3d3" },
+    behavior: {
+      speed: 0.18,
+      locomotion: "hover",
+      schooling: false,
+      activityRadius: 7,
+      hoverAmplitude: 0.22,
+      hoverFrequency: 0.16,
+    },
+    shape: { length: 1.1, height: 1.1, width: 0.2, snoutLength: 0.32, curlRadius: 0.28, finSpan: 0.26 },
+    count: 2,
   },
 ];
 

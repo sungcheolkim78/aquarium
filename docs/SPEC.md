@@ -117,7 +117,7 @@ interface CreatureSpecies extends CreatureVariant {
 - 초기 3종: 클라운피시, 파랑참돔, 노란열대어. 현재 6종의 물고기와 1종의 상어로 확장됨
 - **종 추가 = 레지스트리 엔트리 추가가 끝** (F6의 "물고기 종류" 설정은 이 레지스트리를 순회해 만들어지므로, 종 추가 시 설정 패널에도 자동으로 노출되어야 한다 — 하드코딩된 종 목록 UI 금지)
 
-각 body plan은 geometry key에 따라 독립 builder로 디스패치한다. 현재 `lowpoly-fish`와 `lowpoly-shark`를 지원하며, 상어는 비대칭 꼬리엽과 등지느러미를 가진 별도 shape를 사용한다. 상어 builder는 `web/src/creatures/geometry/shark.ts`에 분리되어 있고, 기존 fish builder의 완전한 모듈 분리는 후속 구조 정리에서 진행한다. `FishSchool`은 이제 `locomotion: "swim" | "hover"`를 지원하며, hover 생물은 anchor의 X/Z를 유지하고 Y축으로만 완만하게 진동한다. 거북이·해마 registry 및 전용 geometry는 후속 확장 범위다.
+각 body plan은 geometry key에 따라 독립 builder로 디스패치한다. 현재 `lowpoly-fish`, `lowpoly-shark`, `lowpoly-seahorse`를 지원하며, 상어는 비대칭 꼬리엽과 등지느러미를, 해마는 수직 몸통·주둥이·말린 꼬리를 가진 별도 shape를 사용한다. 상어와 해마 builder는 `web/src/creatures/geometry/`에 분리되어 있고, 기존 fish builder의 완전한 모듈 분리는 후속 구조 정리에서 진행한다. `FishSchool`은 `locomotion: "swim" | "hover"`를 지원하며, hover 생물은 anchor의 X/Z를 유지하고 Y축으로만 완만하게 진동한다. 거북이 geometry는 후속 확장 범위다.
 
 ### 6.2 폴리곤 디테일 레벨 (v1.1, F7)
 

@@ -30,6 +30,7 @@ import {
   type FishSpecies,
 } from "./config";
 import { buildSharkGeometry } from "./creatures/geometry/shark";
+import { buildSeahorseGeometry } from "./creatures/geometry/seahorse";
 
 /** Fish geometry is modelled nose-first along +X. */
 export const FORWARD = new Vector3(1, 0, 0);
@@ -231,6 +232,8 @@ export function buildCreatureGeometry(
       return buildFishGeometry(species.shape, species.palette, detail);
     case "lowpoly-shark":
       return buildSharkGeometry(species.shape, species.palette, detail);
+    case "lowpoly-seahorse":
+      return buildSeahorseGeometry(species.shape, species.palette, detail);
   }
 }
 
