@@ -208,6 +208,16 @@ interface CreatureDefinition {
     readonly schooling: boolean;
     /** Radius of the roaming volume around the reef centre. */
     readonly activityRadius: number;
+    /** 0 = hugs the floor, 1 = hugs the surface. Swim locomotion only; unused (no pull) if absent. */
+    readonly depthPreference?: number;
+    /** Max heading change per second, in radians. Swim locomotion only; uncapped if absent. */
+    readonly maxTurnRate?: number;
+    /** 0..1: how deep the periodic speed dip goes. Swim locomotion only; no rhythm (flat speed) if absent. */
+    readonly rhythmAmplitude?: number;
+    /** Speed-dip cycles per second. Swim locomotion only; irrelevant if `rhythmAmplitude` is absent. */
+    readonly rhythmFrequency?: number;
+    /** 0..1: pull strength toward this individual's habitat anchor. Swim locomotion only; no pull if absent. */
+    readonly territoryStrength?: number;
   };
   /** How many instances to spawn (one InstancedMesh draw call per species). */
   readonly count: number;
@@ -231,7 +241,16 @@ export const FISH_REGISTRY: readonly FishSpecies[] = [
     label: "클라운피시",
     geometry: "lowpoly-fish",
     palette: { body: "#f2761b", fin: "#c84a09", accent: "#fff3e0" },
-    behavior: { speed: 1.15, locomotion: "swim", schooling: true, activityRadius: 7.5 },
+    behavior: {
+      speed: 1.15,
+      locomotion: "swim",
+      schooling: true,
+      activityRadius: 7.5,
+      depthPreference: 0.3,
+      maxTurnRate: 4.5,
+      rhythmAmplitude: 0.15,
+      rhythmFrequency: 0.5,
+    },
     shape: { length: 0.62, height: 0.34, width: 0.16, tailSpan: 0.3, stripes: 3 },
     count: 20,
   },
@@ -240,7 +259,16 @@ export const FISH_REGISTRY: readonly FishSpecies[] = [
     label: "파랑참돔",
     geometry: "lowpoly-fish",
     palette: { body: "#2f7fd1", fin: "#1b4f87", accent: "#bfe3ff" },
-    behavior: { speed: 0.95, locomotion: "swim", schooling: true, activityRadius: 10.5 },
+    behavior: {
+      speed: 0.95,
+      locomotion: "swim",
+      schooling: true,
+      activityRadius: 10.5,
+      depthPreference: 0.55,
+      maxTurnRate: 3.2,
+      rhythmAmplitude: 0.15,
+      rhythmFrequency: 0.5,
+    },
     shape: { length: 0.86, height: 0.46, width: 0.2, tailSpan: 0.4, stripes: 0 },
     count: 12,
   },
@@ -249,7 +277,17 @@ export const FISH_REGISTRY: readonly FishSpecies[] = [
     label: "노란열대어",
     geometry: "lowpoly-fish",
     palette: { body: "#f5c11d", fin: "#d19206", accent: "#fff8d0" },
-    behavior: { speed: 0.7, locomotion: "swim", schooling: false, activityRadius: 9 },
+    behavior: {
+      speed: 0.7,
+      locomotion: "swim",
+      schooling: false,
+      activityRadius: 9,
+      depthPreference: 0.5,
+      maxTurnRate: 3.2,
+      rhythmAmplitude: 0.25,
+      rhythmFrequency: 0.35,
+      territoryStrength: 0.35,
+    },
     shape: { length: 0.5, height: 0.44, width: 0.13, tailSpan: 0.26, stripes: 0 },
     count: 8,
   },
@@ -259,7 +297,17 @@ export const FISH_REGISTRY: readonly FishSpecies[] = [
     label: "나비치",
     geometry: "lowpoly-fish",
     palette: { body: "#f2d531", fin: "#4a5560", accent: "#20272c" },
-    behavior: { speed: 0.85, locomotion: "swim", schooling: false, activityRadius: 7 },
+    behavior: {
+      speed: 0.85,
+      locomotion: "swim",
+      schooling: false,
+      activityRadius: 7,
+      depthPreference: 0.45,
+      maxTurnRate: 3.2,
+      rhythmAmplitude: 0.25,
+      rhythmFrequency: 0.35,
+      territoryStrength: 0.4,
+    },
     shape: { length: 0.46, height: 0.6, width: 0.12, tailSpan: 0.24, stripes: 1 },
     count: 6,
   },
@@ -269,7 +317,17 @@ export const FISH_REGISTRY: readonly FishSpecies[] = [
     label: "보라탱",
     geometry: "lowpoly-fish",
     palette: { body: "#5b4fd6", fin: "#f5c11d", accent: "#cfe6ff" },
-    behavior: { speed: 0.8, locomotion: "swim", schooling: false, activityRadius: 8.5 },
+    behavior: {
+      speed: 0.8,
+      locomotion: "swim",
+      schooling: false,
+      activityRadius: 8.5,
+      depthPreference: 0.5,
+      maxTurnRate: 3.2,
+      rhythmAmplitude: 0.25,
+      rhythmFrequency: 0.35,
+      territoryStrength: 0.3,
+    },
     shape: { length: 0.7, height: 0.52, width: 0.18, tailSpan: 0.34, stripes: 0 },
     count: 3,
   },
@@ -279,7 +337,16 @@ export const FISH_REGISTRY: readonly FishSpecies[] = [
     label: "자주열대어",
     geometry: "lowpoly-fish",
     palette: { body: "#e8557f", fin: "#b23a5e", accent: "#ffd3e0" },
-    behavior: { speed: 1.3, locomotion: "swim", schooling: true, activityRadius: 6 },
+    behavior: {
+      speed: 1.3,
+      locomotion: "swim",
+      schooling: true,
+      activityRadius: 6,
+      depthPreference: 0.4,
+      maxTurnRate: 4.5,
+      rhythmAmplitude: 0.15,
+      rhythmFrequency: 0.5,
+    },
     shape: { length: 0.34, height: 0.2, width: 0.11, tailSpan: 0.18, stripes: 0 },
     count: 5,
   },
@@ -288,7 +355,16 @@ export const FISH_REGISTRY: readonly FishSpecies[] = [
     label: "백상아리",
     geometry: "lowpoly-shark",
     palette: { body: "#7894a5", fin: "#405563", accent: "#d9edf5" },
-    behavior: { speed: 0.9, locomotion: "swim", schooling: false, activityRadius: 10.5 },
+    behavior: {
+      speed: 0.9,
+      locomotion: "swim",
+      schooling: false,
+      activityRadius: 10.5,
+      depthPreference: 0.6,
+      maxTurnRate: 1.4,
+      rhythmAmplitude: 0.1,
+      rhythmFrequency: 0.2,
+    },
     shape: {
       length: 1.45,
       height: 0.5,
@@ -333,7 +409,16 @@ export const FISH_REGISTRY: readonly FishSpecies[] = [
     label: "푸른바다거북",
     geometry: "lowpoly-turtle",
     palette: { body: "#4e9b78", fin: "#2f665a", accent: "#b9d58a" },
-    behavior: { speed: 0.48, locomotion: "swim", schooling: false, activityRadius: 8.5 },
+    behavior: {
+      speed: 0.48,
+      locomotion: "swim",
+      schooling: false,
+      activityRadius: 8.5,
+      depthPreference: 0.65,
+      maxTurnRate: 1.1,
+      rhythmAmplitude: 0.3,
+      rhythmFrequency: 0.25,
+    },
     shape: {
       shellLength: 1.05,
       shellWidth: 0.72,
@@ -487,7 +572,7 @@ export const SCENE = {
   },
   bubbles: { count: 900, riseSpeed: 0.55, size: 0.1 },
   godRays: { count: 7, opacity: 0.06 },
-  coral: { clusters: 22 },
+  coral: { clusters: 22, avoidanceRadius: 2.0, avoidanceHeight: 1.2 },
   /** Adaptive quality thresholds (SPEC N2 / §6.2). */
   quality: {
     maxPixelRatio: 2,

@@ -37,6 +37,34 @@ describe("creature registry", () => {
     expect(turtle?.geometry).toBe("lowpoly-turtle");
     expect(turtle?.behavior.locomotion).toBe("swim");
   });
+
+  it("scopes territoryStrength to the three solitary reef fish, not schooling fish or roaming shark/turtle", () => {
+    const byId = new Map(FISH_REGISTRY.map((species) => [species.id, species]));
+    for (const id of ["yellow-tang", "butterflyfish", "purple-tang"]) {
+      const species = byId.get(id);
+      expect(species?.behavior.territoryStrength).toBeGreaterThan(0);
+    }
+    for (const id of ["clownfish", "blue-sea-bream", "pink-cardinalfish", "great-white-shark", "green-sea-turtle"]) {
+      const species = byId.get(id);
+      expect(species?.behavior.territoryStrength ?? 0).toBe(0);
+    }
+  });
+
+  it("gives every swim-locomotion species a depth preference and a turn-rate cap", () => {
+    for (const species of FISH_REGISTRY) {
+      if (species.behavior.locomotion !== "swim") continue;
+      expect(species.behavior.depthPreference).toBeGreaterThanOrEqual(0);
+      expect(species.behavior.depthPreference).toBeLessThanOrEqual(1);
+      expect(species.behavior.maxTurnRate).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe("SCENE.coral avoidance", () => {
+  it("defines a positive avoidance radius and height", () => {
+    expect(SCENE.coral.avoidanceRadius).toBeGreaterThan(0);
+    expect(SCENE.coral.avoidanceHeight).toBeGreaterThan(0);
+  });
 });
 
 describe("computeQualityScales", () => {
