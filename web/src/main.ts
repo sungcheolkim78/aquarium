@@ -5,14 +5,16 @@
 
 import "./style.css";
 
-import { Clock, Color, PerspectiveCamera, Scene, Vector3, WebGLRenderer } from "three";
+import { Clock, Color, PerspectiveCamera, Raycaster, Scene, Vector2, Vector3, WebGLRenderer } from "three";
 
 import { FISH_REGISTRY, SCENE, computeQualityScales, effectiveMinFps, type AquariumSettings } from "./config";
 import { createEnvironment } from "./environment";
 import { createRng, createSchools, type FishSchool } from "./fish";
+import { loadObservedSpecies, saveObservedSpecies, withObserved } from "./observations";
 import { createBubbles } from "./particles";
 import { debounce, getLocalStorage, loadSettings, saveSettings } from "./settings";
 import { createSettingsPanel } from "./settingsPanel";
+import { createSpeciesInfo } from "./speciesInfo";
 import { createUi } from "./ui";
 
 declare global {
@@ -95,6 +97,14 @@ function boot(): void {
   });
   const schoolsById = new Map<string, FishSchool>(schools.map((school) => [school.species.id, school]));
   for (const school of schools) school.addTo(scene);
+
+  let observedSpecies = loadObservedSpecies(getLocalStorage(), FISH_REGISTRY);
+  const speciesInfo = createSpeciesInfo(FISH_REGISTRY, observedSpecies, {
+    onObserve(speciesId: string): void {
+      observedSpecies = withObserved(observedSpecies, speciesId);
+      saveObservedSpecies(observedSpecies, getLocalStorage());
+    },
+  });
   const bubbles = createBubbles(rng);
   bubbles.setEnabled(settings.bubbles.enabled);
   scene.add(bubbles.points);
@@ -167,7 +177,12 @@ function boot(): void {
     },
   });
 
-  const ui = createUi(overlay, { settingsPanel: settingsPanel.element, initialVolume: settings.audio.volume });
+  const ui = createUi(overlay, {
+    settingsPanel: settingsPanel.element,
+    initialVolume: settings.audio.volume,
+    speciesCard: speciesInfo.cardElement,
+    speciesCatalog: speciesInfo.catalogElement,
+  });
 
   const onResize = (): void => {
     camera.aspect = window.innerWidth / window.innerHeight;
@@ -176,6 +191,32 @@ function boot(): void {
     renderer.setSize(window.innerWidth, window.innerHeight, false);
   };
   window.addEventListener("resize", onResize);
+
+  const raycaster = new Raycaster();
+  const pointerNdc = new Vector2();
+
+  const onCanvasClick = (event: MouseEvent): void => {
+    const rect = canvas.getBoundingClientRect();
+    pointerNdc.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    pointerNdc.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+    raycaster.setFromCamera(pointerNdc, camera);
+    // three.js's Raycaster applies no `.visible` check of its own — a
+    // hidden species must be filtered out here, not left to the library.
+    const pickableMeshes = schools.filter((school) => school.mesh.visible).map((school) => school.mesh);
+    const hit = raycaster.intersectObjects(pickableMeshes)[0];
+    if (!hit) {
+      speciesInfo.closeCard();
+      return;
+    }
+    const school = schools.find((candidate) => candidate.mesh === hit.object);
+    if (school) speciesInfo.showSpecies(school.species.id);
+  };
+  canvas.addEventListener("click", onCanvasClick);
+
+  const onKeydown = (event: KeyboardEvent): void => {
+    if (event.key === "Escape") speciesInfo.closeCard();
+  };
+  window.addEventListener("keydown", onKeydown);
 
   const clock = new Clock();
   let elapsed = 0;
@@ -295,11 +336,14 @@ function boot(): void {
     disposed = true;
     window.removeEventListener("resize", onResize);
     document.removeEventListener("visibilitychange", onVisibilityChange);
+    canvas.removeEventListener("click", onCanvasClick);
+    window.removeEventListener("keydown", onKeydown);
     for (const school of schools) school.dispose();
     bubbles.dispose();
     environment.dispose();
     ui.dispose();
     settingsPanel.dispose();
+    speciesInfo.dispose();
     renderer.dispose();
   });
 
