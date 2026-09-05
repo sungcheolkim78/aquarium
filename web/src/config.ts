@@ -1,13 +1,15 @@
 /**
  * Data-driven configuration for the aquarium (SPEC §6.1, N4).
  *
- * Adding a new fish species must never require touching rendering or
+ * Adding a new creature species must never require touching rendering or
  * behaviour code: append one entry to `FISH_REGISTRY` and the scene picks it
  * up on the next reload.
  */
 
 /** Procedural geometry builders available to the registry. */
-export type FishGeometryId = "lowpoly-fish";
+export type CreatureGeometryId = "lowpoly-fish" | "lowpoly-shark";
+/** Backward-compatible name for callers that still use the fish terminology. */
+export type FishGeometryId = CreatureGeometryId;
 
 /** Polygon detail tier, user-selectable via the settings panel (SPEC §6.2, F7). */
 export type DetailLevel = "low" | "medium" | "high";
@@ -119,12 +121,23 @@ export interface FishShape {
   readonly stripes: number;
 }
 
-/** A single fish species definition (SPEC §6.1). */
-export interface FishSpecies {
+/** Silhouette parameters for a shark's distinct body plan. */
+export interface SharkShape {
+  readonly length: number;
+  readonly height: number;
+  readonly width: number;
+  readonly tailSpan: number;
+  readonly dorsalFinHeight: number;
+}
+
+export type CreatureVariant =
+  | { readonly geometry: "lowpoly-fish"; readonly shape: FishShape }
+  | { readonly geometry: "lowpoly-shark"; readonly shape: SharkShape };
+
+interface CreatureDefinition {
   readonly id: string;
   /** Human readable Korean name shown nowhere in v1 UI, kept for v2 labels. */
   readonly label: string;
-  readonly geometry: FishGeometryId;
   readonly palette: {
     readonly body: string;
     readonly fin: string;
@@ -133,15 +146,21 @@ export interface FishSpecies {
   readonly behavior: {
     /** Base swim speed in world units per second. */
     readonly speed: number;
+    /** Movement model; sharks currently reuse the existing swimming behavior. */
+    readonly locomotion: "swim";
     /** Whether individuals steer toward their school centroid. */
     readonly schooling: boolean;
     /** Radius of the roaming volume around the reef centre. */
     readonly activityRadius: number;
   };
-  readonly shape: FishShape;
   /** How many instances to spawn (one InstancedMesh draw call per species). */
   readonly count: number;
 }
+
+/** A single registry creature definition (SPEC §6.1). */
+export type CreatureSpecies = CreatureDefinition & CreatureVariant;
+/** Compatibility alias while the school implementation is being generalized. */
+export type FishSpecies = CreatureSpecies;
 
 /**
  * Initial three species (SPEC F3): 클라운피시, 파랑참돔, 노란열대어.
@@ -156,7 +175,7 @@ export const FISH_REGISTRY: readonly FishSpecies[] = [
     label: "클라운피시",
     geometry: "lowpoly-fish",
     palette: { body: "#f2761b", fin: "#c84a09", accent: "#fff3e0" },
-    behavior: { speed: 1.15, schooling: true, activityRadius: 7.5 },
+    behavior: { speed: 1.15, locomotion: "swim", schooling: true, activityRadius: 7.5 },
     shape: { length: 0.62, height: 0.34, width: 0.16, tailSpan: 0.3, stripes: 3 },
     count: 20,
   },
@@ -165,7 +184,7 @@ export const FISH_REGISTRY: readonly FishSpecies[] = [
     label: "파랑참돔",
     geometry: "lowpoly-fish",
     palette: { body: "#2f7fd1", fin: "#1b4f87", accent: "#bfe3ff" },
-    behavior: { speed: 0.95, schooling: true, activityRadius: 10.5 },
+    behavior: { speed: 0.95, locomotion: "swim", schooling: true, activityRadius: 10.5 },
     shape: { length: 0.86, height: 0.46, width: 0.2, tailSpan: 0.4, stripes: 0 },
     count: 12,
   },
@@ -174,7 +193,7 @@ export const FISH_REGISTRY: readonly FishSpecies[] = [
     label: "노란열대어",
     geometry: "lowpoly-fish",
     palette: { body: "#f5c11d", fin: "#d19206", accent: "#fff8d0" },
-    behavior: { speed: 0.7, schooling: false, activityRadius: 9 },
+    behavior: { speed: 0.7, locomotion: "swim", schooling: false, activityRadius: 9 },
     shape: { length: 0.5, height: 0.44, width: 0.13, tailSpan: 0.26, stripes: 0 },
     count: 8,
   },
@@ -184,7 +203,7 @@ export const FISH_REGISTRY: readonly FishSpecies[] = [
     label: "나비치",
     geometry: "lowpoly-fish",
     palette: { body: "#f2d531", fin: "#4a5560", accent: "#20272c" },
-    behavior: { speed: 0.85, schooling: false, activityRadius: 7 },
+    behavior: { speed: 0.85, locomotion: "swim", schooling: false, activityRadius: 7 },
     shape: { length: 0.46, height: 0.6, width: 0.12, tailSpan: 0.24, stripes: 1 },
     count: 6,
   },
@@ -194,7 +213,7 @@ export const FISH_REGISTRY: readonly FishSpecies[] = [
     label: "보라탱",
     geometry: "lowpoly-fish",
     palette: { body: "#5b4fd6", fin: "#f5c11d", accent: "#cfe6ff" },
-    behavior: { speed: 0.8, schooling: false, activityRadius: 8.5 },
+    behavior: { speed: 0.8, locomotion: "swim", schooling: false, activityRadius: 8.5 },
     shape: { length: 0.7, height: 0.52, width: 0.18, tailSpan: 0.34, stripes: 0 },
     count: 5,
   },
@@ -204,9 +223,18 @@ export const FISH_REGISTRY: readonly FishSpecies[] = [
     label: "자주열대어",
     geometry: "lowpoly-fish",
     palette: { body: "#e8557f", fin: "#b23a5e", accent: "#ffd3e0" },
-    behavior: { speed: 1.3, schooling: true, activityRadius: 6 },
+    behavior: { speed: 1.3, locomotion: "swim", schooling: true, activityRadius: 6 },
     shape: { length: 0.34, height: 0.2, width: 0.11, tailSpan: 0.18, stripes: 0 },
-    count: 9,
+    count: 5,
+  },
+  {
+    id: "great-white-shark",
+    label: "백상아리",
+    geometry: "lowpoly-shark",
+    palette: { body: "#7894a5", fin: "#405563", accent: "#d9edf5" },
+    behavior: { speed: 0.9, locomotion: "swim", schooling: false, activityRadius: 10.5 },
+    shape: { length: 1.45, height: 0.5, width: 0.26, tailSpan: 0.62, dorsalFinHeight: 0.42 },
+    count: 4,
   },
 ];
 

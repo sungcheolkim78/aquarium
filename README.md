@@ -54,13 +54,14 @@ aquarium/
     ├── vite.config.ts  # Vite 설정
     └── src/
         ├── main.ts         # 렌더 루프, 카메라 드리프트, 적응형 품질 제어
-        ├── config.ts       # 어종 레지스트리(FISH_REGISTRY) 및 씬 설정
-        ├── fish.ts         # 절차적 물고기 지오메트리 & Boid 군집 시뮬레이션
+        ├── config.ts       # 생물 레지스트리(FISH_REGISTRY) 및 씬 설정
+        ├── fish.ts         # geometry 디스패치, 절차적 생물 인스턴싱 & Boid 시뮬레이션
+        ├── creatures/      # body plan별 geometry builder (fish, shark)
         ├── environment.ts  # 해저 지형, 산호군락, 해초, 광선 및 조명 생성
         ├── particles.ts    # 상승 기포 파티클 시스템
         ├── ui.ts           # 로딩 화면, 타이틀, 앰비언트 사운드(Web Audio API)
         ├── style.css       # 미니멀 UI 스타일
-        └── fish.test.ts    # 물고기 지오메트리 및 시뮬레이션 단위 테스트
+        └── fish.test.ts    # 생물 geometry 및 시뮬레이션 단위 테스트
 ```
 
 ---

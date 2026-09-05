@@ -95,23 +95,29 @@ web/src/
 
 ## 6. 설계 상세
 
-### 6.1 물고기 데이터 모델 (레지스트리)
+### 6.1 생물 데이터 모델 (레지스트리)
 
 ```ts
-interface FishSpecies {
+type CreatureVariant =
+  | { geometry: "lowpoly-fish"; shape: FishShape }
+  | { geometry: "lowpoly-shark"; shape: SharkShape };
+
+interface CreatureSpecies extends CreatureVariant {
   id: string;
-  geometry: string;                    // low-poly 지오메트리 식별자 또는 모델 경로
   palette: { body: string; fin: string; accent: string };
   behavior: {
     speed: number;                     // 기본 유영 속도
+    locomotion: "swim";               // 현재 상어도 기존 유영 로직 재사용
     schooling: boolean;                // 군집 여부
     activityRadius: number;            // 활동 반경
   };
 }
 ```
 
-- 초기 3종: 클라운피시, 파랑참돔, 노란열대어. 현재 6종(§2 F3)까지 확장됨
+- 초기 3종: 클라운피시, 파랑참돔, 노란열대어. 현재 6종의 물고기와 1종의 상어로 확장됨
 - **종 추가 = 레지스트리 엔트리 추가가 끝** (F6의 "물고기 종류" 설정은 이 레지스트리를 순회해 만들어지므로, 종 추가 시 설정 패널에도 자동으로 노출되어야 한다 — 하드코딩된 종 목록 UI 금지)
+
+각 body plan은 geometry key에 따라 독립 builder로 디스패치한다. 현재 `lowpoly-fish`와 `lowpoly-shark`를 지원하며, 상어는 비대칭 꼬리엽과 등지느러미를 가진 별도 shape를 사용한다. 상어 builder는 `web/src/creatures/geometry/shark.ts`에 분리되어 있고, 기존 fish builder의 완전한 모듈 분리는 후속 구조 정리에서 진행한다. 거북이·해마 및 해마용 `hover` locomotion은 후속 확장 범위다.
 
 ### 6.2 폴리곤 디테일 레벨 (v1.1, F7)
 

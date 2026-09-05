@@ -17,7 +17,7 @@ import {
 } from "./config";
 import type { Material } from "three";
 
-import { buildFishGeometry, createRng } from "./fish";
+import { buildCreatureGeometry, createRng } from "./fish";
 import { computeObjectCounts, createCoral, createFloor, createSeaweed } from "./environment";
 
 function disposeMaterial(material: Material | Material[]): void {
@@ -386,7 +386,7 @@ export function estimateTriangleBudget(
 
   for (const species of registry) {
     if (settings.fish.enabledSpecies[species.id] === false) continue;
-    const geometry = buildFishGeometry(species.shape, species.palette, settings.fish.detail);
+    const geometry = buildCreatureGeometry(species, settings.fish.detail);
     const trianglesPerFish = geometry.getAttribute("position").count / 3;
     geometry.dispose();
     const count = Math.max(1, Math.round(species.count * settings.fish.countScale));

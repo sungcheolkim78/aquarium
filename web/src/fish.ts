@@ -25,9 +25,11 @@ import {
   FISH_REGISTRY,
   SCENE,
   type DetailLevel,
+  type CreatureSpecies,
   type FishShape,
   type FishSpecies,
 } from "./config";
+import { buildSharkGeometry } from "./creatures/geometry/shark";
 
 /** Fish geometry is modelled nose-first along +X. */
 export const FORWARD = new Vector3(1, 0, 0);
@@ -219,6 +221,19 @@ export function buildFishGeometry(
   return geometry;
 }
 
+/** Dispatch a registered creature to the builder for its body plan. */
+export function buildCreatureGeometry(
+  species: CreatureSpecies,
+  detail: DetailLevel = "medium",
+): BufferGeometry {
+  switch (species.geometry) {
+    case "lowpoly-fish":
+      return buildFishGeometry(species.shape, species.palette, detail);
+    case "lowpoly-shark":
+      return buildSharkGeometry(species.shape, species.palette, detail);
+  }
+}
+
 /** A single simulated fish. */
 export interface Boid {
   readonly position: Vector3;
@@ -287,7 +302,7 @@ export class FishSchool {
     this.species = species;
     this.rng = rng;
     this.capacity = species.count;
-    this.geometry = buildFishGeometry(species.shape, species.palette, detail);
+    this.geometry = buildCreatureGeometry(species, detail);
     this.material = new MeshLambertMaterial({
       vertexColors: true,
       flatShading: true,
@@ -408,7 +423,7 @@ transformed.z += swayWave * swayWeight * swayWeight * ${(species.shape.length * 
 
   /** Swap the vertex geometry for a new detail level in place (SPEC §6.5.3). */
   rebuildGeometry(detail: DetailLevel): void {
-    const next = buildFishGeometry(this.species.shape, this.species.palette, detail);
+    const next = buildCreatureGeometry(this.species, detail);
     this.mesh.geometry = next;
     this.geometry.dispose();
     this.geometry = next;
@@ -441,6 +456,7 @@ transformed.z += swayWave * swayWeight * swayWeight * ${(species.shape.length * 
     next.visible = visible;
 
     this.mesh = next;
+    this.writePhaseAttribute();
     this.writeMatrices();
 
     if (parent) {

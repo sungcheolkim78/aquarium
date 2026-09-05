@@ -9,6 +9,7 @@ import { Vector3 } from "three";
 import { FISH_REGISTRY, SCENE, totalFishCount, type FishSpecies } from "./config";
 import {
   buildFishGeometry,
+  buildCreatureGeometry,
   computeCentroid,
   computeFacetJitter,
   containSteer,
@@ -43,11 +44,13 @@ describe("fish registry", () => {
       "butterflyfish",
       "purple-tang",
       "pink-cardinalfish",
+      "great-white-shark",
     ]);
     expect(FISH_REGISTRY.slice(3).map((species) => species.label)).toEqual([
       "나비치",
       "보라탱",
       "자주열대어",
+      "백상아리",
     ]);
   });
 
@@ -64,16 +67,21 @@ describe("fish registry", () => {
 
   it("defines a complete, well-formed entry per species", () => {
     for (const species of FISH_REGISTRY) {
-      expect(species.geometry).toBe("lowpoly-fish");
+      expect(["lowpoly-fish", "lowpoly-shark"]).toContain(species.geometry);
       expect(species.palette.body).toMatch(HEX);
       expect(species.palette.fin).toMatch(HEX);
       expect(species.palette.accent).toMatch(HEX);
       expect(species.behavior.speed).toBeGreaterThan(0);
+      expect(species.behavior.locomotion).toBe("swim");
       expect(species.behavior.activityRadius).toBeGreaterThan(0);
       expect(species.behavior.activityRadius).toBeLessThanOrEqual(SCENE.bounds.x);
       expect(species.count).toBeGreaterThan(0);
       expect(species.shape.length).toBeGreaterThan(0);
-      expect(species.shape.stripes).toBeGreaterThanOrEqual(0);
+      if (species.geometry === "lowpoly-fish") {
+        expect(species.shape.stripes).toBeGreaterThanOrEqual(0);
+      } else {
+        expect(species.shape.dorsalFinHeight).toBeGreaterThan(0);
+      }
     }
   });
 
@@ -110,6 +118,7 @@ describe("createRng", () => {
 describe("buildFishGeometry", () => {
   it("produces a finite, low-poly, non-indexed mesh", () => {
     for (const species of FISH_REGISTRY) {
+      if (species.geometry !== "lowpoly-fish") continue;
       const geometry = buildFishGeometry(species.shape, species.palette);
       const position = geometry.getAttribute("position");
       const color = geometry.getAttribute("color");
@@ -129,7 +138,7 @@ describe("buildFishGeometry", () => {
   });
 
   it("defaults to medium detail, matching the exact v1 baseline (AC-1)", () => {
-    const species = FISH_REGISTRY[0] as FishSpecies;
+    const species = FISH_REGISTRY[0] as Extract<FishSpecies, { geometry: "lowpoly-fish" }>;
     const withoutDetail = buildFishGeometry(species.shape, species.palette);
     const withMedium = buildFishGeometry(species.shape, species.palette, "medium");
     expect(withoutDetail.getAttribute("position").count).toBe(
@@ -141,6 +150,7 @@ describe("buildFishGeometry", () => {
 
   it("orders low <= medium <= high triangle counts", () => {
     for (const species of FISH_REGISTRY) {
+      if (species.geometry !== "lowpoly-fish") continue;
       const low = buildFishGeometry(species.shape, species.palette, "low");
       const medium = buildFishGeometry(species.shape, species.palette, "medium");
       const high = buildFishGeometry(species.shape, species.palette, "high");
@@ -155,6 +165,7 @@ describe("buildFishGeometry", () => {
 
   it("scales high detail to ~2.5x (+150%) of medium, within 2.3~2.7x (AC-2)", () => {
     for (const species of FISH_REGISTRY) {
+      if (species.geometry !== "lowpoly-fish") continue;
       const medium = buildFishGeometry(species.shape, species.palette, "medium");
       const high = buildFishGeometry(species.shape, species.palette, "high");
       const mediumTris = medium.getAttribute("position").count / 3;
@@ -168,7 +179,7 @@ describe("buildFishGeometry", () => {
   });
 
   it("paints accent stripes only for striped species", () => {
-    const clownfish = FISH_REGISTRY[0] as FishSpecies;
+    const clownfish = FISH_REGISTRY[0] as Extract<FishSpecies, { geometry: "lowpoly-fish" }>;
     expect(clownfish.shape.stripes).toBeGreaterThan(0);
     const geometry = buildFishGeometry(clownfish.shape, {
       body: "#000000",
@@ -186,6 +197,7 @@ describe("buildFishGeometry", () => {
 
   it("stays a vertex-for-vertex regression of v1 at medium detail (no facet jitter, AC-9)", () => {
     for (const species of FISH_REGISTRY) {
+      if (species.geometry !== "lowpoly-fish") continue;
       const a = buildFishGeometry(species.shape, species.palette, "medium");
       const b = buildFishGeometry(species.shape, species.palette, "medium");
       expect(Array.from(a.getAttribute("position").array)).toEqual(
@@ -245,6 +257,7 @@ describe("computeFacetJitter (SPEC §6.2.1, AC-9)", () => {
 describe("buildFishGeometry high detail facet jitter (AC-9)", () => {
   it("keeps every vertex finite and within a bounded distance of the body axis", () => {
     for (const species of FISH_REGISTRY) {
+      if (species.geometry !== "lowpoly-fish") continue;
       const geometry = buildFishGeometry(species.shape, species.palette, "high");
       const position = geometry.getAttribute("position");
       const maxRadius = Math.max(species.shape.height, species.shape.width) * 0.75;
@@ -259,6 +272,40 @@ describe("buildFishGeometry high detail facet jitter (AC-9)", () => {
       }
       geometry.dispose();
     }
+  });
+});
+
+describe("buildCreatureGeometry shark variant", () => {
+  it("builds a finite shark with more triangles at high detail", () => {
+    const shark = FISH_REGISTRY.find((species) => species.geometry === "lowpoly-shark");
+    expect(shark).toBeDefined();
+    if (!shark) return;
+
+    const medium = buildCreatureGeometry(shark, "medium");
+    const high = buildCreatureGeometry(shark, "high");
+    expect(medium.index).toBeNull();
+    expect(high.getAttribute("position").count).toBeGreaterThan(
+      medium.getAttribute("position").count,
+    );
+    for (const value of high.getAttribute("position").array) expect(Number.isFinite(value)).toBe(true);
+    medium.dispose();
+    high.dispose();
+  });
+
+  it("is deterministic and includes a dorsal fin above the body", () => {
+    const shark = FISH_REGISTRY.find((species) => species.geometry === "lowpoly-shark");
+    expect(shark).toBeDefined();
+    if (!shark) return;
+
+    const first = buildCreatureGeometry(shark, "medium");
+    const second = buildCreatureGeometry(shark, "medium");
+    expect(Array.from(first.getAttribute("position").array)).toEqual(
+      Array.from(second.getAttribute("position").array),
+    );
+    const yValues = first.getAttribute("position").array.filter((_, index) => index % 3 === 1);
+    expect(Math.max(...yValues)).toBeGreaterThan(shark.shape.height / 2);
+    first.dispose();
+    second.dispose();
   });
 });
 
@@ -374,6 +421,7 @@ describe("FishSchool", () => {
     const grown = Math.round(species.count * 1.5);
     expect(school.mesh.count).toBe(grown);
     expect(school.visibleCount).toBe(grown);
+    expect(school.mesh.geometry.getAttribute("aPhase").count).toBe(grown);
 
     school.rebuildInstances(0.5);
     const shrunk = Math.round(species.count * 0.5);

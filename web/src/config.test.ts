@@ -6,7 +6,24 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { SCENE, computeQualityScales, effectiveMinFps } from "./config";
+import {
+  FISH_REGISTRY,
+  SCENE,
+  computeQualityScales,
+  effectiveMinFps,
+  type CreatureSpecies,
+} from "./config";
+
+describe("creature registry", () => {
+  it("includes a shark as a distinct geometry variant", () => {
+    const shark = FISH_REGISTRY.find((species) => species.id === "great-white-shark") as
+      | CreatureSpecies
+      | undefined;
+    expect(shark).toBeDefined();
+    if (!shark || shark.geometry !== "lowpoly-shark") throw new Error("shark registry entry missing");
+    expect(shark.shape.dorsalFinHeight).toBeGreaterThan(0);
+  });
+});
 
 describe("computeQualityScales", () => {
   it("is full quality at step 0 without power save", () => {
