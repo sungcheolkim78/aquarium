@@ -207,6 +207,8 @@ export class FishSchool {
   private readonly steer = new Vector3();
   private readonly centroid = new Vector3();
   private readonly heading = new Vector3();
+  private readonly desiredDirection = new Vector3();
+  private readonly turnedDirection = new Vector3();
   /** Current instance capacity, set by the user's "fish count" scale (SPEC §6.5.3). */
   private capacity: number;
   private readonly coralClusterCenters: readonly Vector3[];
@@ -277,7 +279,7 @@ transformed.z += swayWave * swayWeight * swayWeight * ${(species.shape.length * 
       this.writeMatrices();
       return;
     }
-    const { speed, schooling, territoryStrength, depthPreference } = this.species.behavior;
+    const { speed, schooling, territoryStrength, depthPreference, maxTurnRate } = this.species.behavior;
     const active = this.mesh.count;
     const school = this.boids.slice(0, active);
     if (schooling) computeCentroid(school, this.centroid);
@@ -314,11 +316,9 @@ transformed.z += swayWave * swayWeight * swayWeight * ${(species.shape.length * 
           .multiplyScalar(WANDER),
       );
 
-      this.steer.add(
-        containSteer(boid.position, SCENE.bounds, SCENE.floorY, 2, this.scratch).multiplyScalar(
-          CONTAIN,
-        ),
-      );
+      const containPush = containSteer(boid.position, SCENE.bounds, SCENE.floorY, 2, this.scratch);
+      const nearWall = containPush.lengthSq() > 1e-8;
+      this.steer.add(this.scratch.multiplyScalar(CONTAIN));
 
       if (territoryStrength) {
         this.scratch
@@ -343,13 +343,24 @@ transformed.z += swayWave * swayWeight * swayWeight * ${(species.shape.length * 
           .multiplyScalar(DEPTH_BIAS),
       );
 
-      boid.velocity.addScaledVector(this.steer, dt);
-      const currentSpeed = boid.velocity.length();
-      if (currentSpeed < 1e-4) {
-        boid.velocity.copy(FORWARD).multiplyScalar(speed);
+      this.heading.copy(boid.velocity);
+      if (this.heading.lengthSq() < 1e-8) this.heading.copy(FORWARD);
+      else this.heading.normalize();
+
+      this.desiredDirection.copy(boid.velocity).addScaledVector(this.steer, dt);
+      const desiredSpeed = this.desiredDirection.length();
+      if (desiredSpeed < 1e-4) this.desiredDirection.copy(this.heading);
+      else this.desiredDirection.normalize();
+
+      if (maxTurnRate !== undefined && !nearWall) {
+        clampTurnRate(this.heading, this.desiredDirection, maxTurnRate * dt, this.turnedDirection);
       } else {
-        boid.velocity.multiplyScalar(1 + (speed / currentSpeed - 1) * Math.min(1, dt * 1.8));
+        this.turnedDirection.copy(this.desiredDirection);
       }
+
+      boid.velocity.copy(this.turnedDirection).multiplyScalar(Math.max(desiredSpeed, 1e-4));
+      const currentSpeed = boid.velocity.length();
+      boid.velocity.multiplyScalar(1 + (speed / currentSpeed - 1) * Math.min(1, dt * 1.8));
       boid.position.addScaledVector(boid.velocity, dt);
     }
 

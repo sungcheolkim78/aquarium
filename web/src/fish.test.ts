@@ -875,4 +875,47 @@ describe("FishSchool", () => {
     surfaceSchool.dispose();
     floorSchool.dispose();
   });
+
+  it("never turns a fish faster than its maxTurnRate per frame, even under a strong pull", () => {
+    // A weak ambient force (e.g. plain wander) would never demand a turn sharp
+    // enough to prove the cap does anything — this plants a deliberately
+    // strong, sustained pull the opposite way so the *desired* direction
+    // swings hard every frame, and asserts the *actual* direction never
+    // follows faster than maxTurnRate allows.
+    const yellowTang = FISH_REGISTRY.find((species) => species.id === "yellow-tang") as FishSpecies;
+    const maxTurnRate = yellowTang.behavior.maxTurnRate as number;
+    const school = new FishSchool(yellowTang, createRng(4));
+    const boids = (school as unknown as { boids: Boid[] }).boids;
+    for (const boid of boids) {
+      boid.position.set(0, SCENE.floorY + SCENE.bounds.y, 0);
+      boid.velocity.set(1, 0, 0).multiplyScalar(yellowTang.behavior.speed);
+      boid.habitatAnchor.set(-20, SCENE.floorY + SCENE.bounds.y, 0);
+    }
+
+    const dt = 1 / 60;
+    let previousDirections = boids.map((b) => b.velocity.clone().normalize());
+    for (let step = 0; step < 120; step += 1) {
+      school.update(dt, step * dt);
+      const nextDirections = boids.map((b) => b.velocity.clone().normalize());
+      for (let i = 0; i < boids.length; i += 1) {
+        const angle = (previousDirections[i] as Vector3).angleTo(nextDirections[i] as Vector3);
+        expect(angle).toBeLessThanOrEqual(maxTurnRate * dt + 1e-6);
+      }
+      previousDirections = nextDirections;
+    }
+    school.dispose();
+  });
+
+  it("still fully corrects a fish heading straight out of bounds, even with a tiny maxTurnRate", () => {
+    const turtle = FISH_REGISTRY.find((species) => species.id === "green-sea-turtle") as FishSpecies;
+    const school = new FishSchool(turtle, createRng(6));
+    const boid = (school as unknown as { boids: Boid[] }).boids[0] as Boid;
+    boid.position.set(SCENE.bounds.x - 0.05, SCENE.floorY + SCENE.bounds.y, 0);
+    boid.velocity.set(1, 0, 0).multiplyScalar(turtle.behavior.speed);
+
+    for (let step = 0; step < 180; step += 1) school.update(1 / 60, step / 60);
+
+    expect(Math.abs(boid.position.x)).toBeLessThanOrEqual(SCENE.bounds.x);
+    school.dispose();
+  });
 });
