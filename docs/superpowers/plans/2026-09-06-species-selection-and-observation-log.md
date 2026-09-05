@@ -372,14 +372,12 @@ git commit -m "feat: add the observation-log persistence module"
 **Interfaces:**
 - Consumes: `FishSchool`, `createRng` (existing), `Raycaster` (three.js — new import in this test file only).
 
-This task adds **no new production code** — it's a characterization test proving a claim the design relies on: three.js's own `InstancedMesh.raycast()` only tests instances `0..mesh.count`, and `Raycaster.intersectObjects`/`intersectObject` skip `visible === false` objects. Both tests are expected to **pass immediately** once written; there is nothing to implement. If either fails when first run, that's a real finding — stop and re-read `docs/superpowers/specs/2026-09-06-species-selection-and-observation-log-design.md` §1 before changing anything, since the whole "no new exclusion logic needed" design decision rests on this.
+**[DONE — real finding, plan corrected below.]** This task added no new production code — it's a characterization test that was expected to prove three.js excludes both hidden species and population-scaled-inactive instances automatically. Running it found that's only half true: `InstancedMesh.raycast()` does respect `mesh.count` (population scale is automatic), but three.js 0.180's `Raycaster.intersectObject`/`intersectObjects` apply **no `.visible` check at all** (confirmed against `node_modules/three/src/core/Raycaster.js`) — hidden-species exclusion is NOT automatic and needs an explicit filter. **Task 7 below is updated accordingly**: the click handler filters `schools` by `school.mesh.visible` before raycasting, rather than relying on three.js to do it. The design doc (`docs/superpowers/specs/2026-09-06-species-selection-and-observation-log-design.md` §1) has been corrected to match.
 
-- [ ] **Step 1: Write the test**
-
-Add to `web/src/fish.test.ts`, as a new top-level `describe` block (anywhere after the existing imports; e.g. right after the `describe("FishSchool", ...)` block's closing `});`):
+The tests actually written (in `web/src/fish.test.ts`, alongside `Raycaster` added to the existing `import { Vector3 } from "three";` line):
 
 ```ts
-describe("InstancedMesh picking excludes hidden/inactive instances (§4.4 AC)", () => {
+describe("InstancedMesh picking and hidden/inactive instances (§4.4 AC)", () => {
   function raycastAt(target: Vector3): Raycaster {
     const raycaster = new Raycaster();
     raycaster.ray.origin.copy(target).addScaledVector(new Vector3(0, 0, 1), -5);
@@ -389,7 +387,7 @@ describe("InstancedMesh picking excludes hidden/inactive instances (§4.4 AC)", 
     return raycaster;
   }
 
-  it("stops hitting a species' instances once it's hidden", () => {
+  it("does NOT stop a raw Raycaster from hitting a hidden mesh — three.js's Raycaster never checks .visible itself", () => {
     const species = FISH_REGISTRY[0] as FishSpecies;
     const school = new FishSchool(species, createRng(1));
     const boids = (school as unknown as { boids: Boid[] }).boids;
@@ -397,7 +395,19 @@ describe("InstancedMesh picking excludes hidden/inactive instances (§4.4 AC)", 
 
     expect(raycaster.intersectObject(school.mesh, false).length).toBeGreaterThan(0);
     school.setVisible(false);
-    expect(raycaster.intersectObject(school.mesh, false).length).toBe(0);
+    expect(raycaster.intersectObject(school.mesh, false).length).toBeGreaterThan(0);
+    school.dispose();
+  });
+
+  it("excludes a hidden species when the caller filters by mesh.visible before raycasting (the pattern main.ts uses)", () => {
+    const species = FISH_REGISTRY[0] as FishSpecies;
+    const school = new FishSchool(species, createRng(1));
+    const boids = (school as unknown as { boids: Boid[] }).boids;
+    const raycaster = raycastAt((boids[0] as Boid).position);
+    school.setVisible(false);
+
+    const pickable = [school].filter((candidate) => candidate.mesh.visible).map((candidate) => candidate.mesh);
+    expect(raycaster.intersectObjects(pickable).length).toBe(0);
     school.dispose();
   });
 
@@ -416,24 +426,10 @@ describe("InstancedMesh picking excludes hidden/inactive instances (§4.4 AC)", 
 });
 ```
 
-Add `Raycaster` to the existing `import { Vector3 } from "three";` line in `fish.test.ts` (becomes `import { Raycaster, Vector3 } from "three";`).
-
-- [ ] **Step 2: Run the test and verify it passes**
-
-Run: `npm --prefix web run test -- src/fish.test.ts`
-
-Expected: both pass on the first run. If a test fails, do not "fix" it by changing the assertion — investigate why three.js's raycast semantics don't match the design's assumption (e.g. adjust the ray geometry in `raycastAt`, since a miss could mean the ray isn't actually crossing the body's surface, not that exclusion is broken) before touching anything else in this plan.
-
-- [ ] **Step 3: Run the full suite**
-
-Run: `npm --prefix web run test`
-
-- [ ] **Step 4: Commit**
-
-```bash
-git add web/src/fish.test.ts
-git commit -m "test: pin down automatic hidden/inactive-instance raycast exclusion"
-```
+- [x] **Step 1: Write the test** — done, see above.
+- [x] **Step 2: Run and interpret** — the "hidden" case failed on first run (the real finding); tests were rewritten to assert actual behavior instead of the false assumption, then passed. The "population count" case passed immediately as expected.
+- [x] **Step 3: Run the full suite** — green (134 tests at the time).
+- [x] **Step 4: Commit** — `git commit -m "test: pin down actual InstancedMesh picking exclusion behavior"`.
 
 ### Task 4: Build the species-info card and catalog DOM
 
@@ -1012,7 +1008,8 @@ Right after the existing `window.addEventListener("resize", onResize);` line, ad
     pointerNdc.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
     pointerNdc.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
     raycaster.setFromCamera(pointerNdc, camera);
-    const hit = raycaster.intersectObjects(schools.map((school) => school.mesh))[0];
+    const pickableMeshes = schools.filter((school) => school.mesh.visible).map((school) => school.mesh);
+    const hit = raycaster.intersectObjects(pickableMeshes)[0];
     if (!hit) {
       speciesInfo.closeCard();
       return;
@@ -1028,7 +1025,9 @@ Right after the existing `window.addEventListener("resize", onResize);` line, ad
   window.addEventListener("keydown", onKeydown);
 ```
 
-(Looking up the school by scanning `schools` — at most 9 entries — instead of a `mesh → school` map built once: `rebuildInstances` replaces `school.mesh` with a brand-new `InstancedMesh` whenever the user changes the fish-count setting, which would silently desync a map built only at boot. Re-reading `schools[].mesh` fresh on every click has no such staleness risk and costs nothing at this scale.)
+(Looking up the school by scanning `schools` — at most 9 entries — instead of a `mesh → school` map built once: `rebuildInstances` replaces `school.mesh` with a brand-new `InstancedMesh` whenever the user changes the fish-count setting, which would silently desync a map built only at boot. Re-reading `schools[].mesh` fresh on every click has no such staleness risk and costs nothing at this scale.
+
+`.filter((school) => school.mesh.visible)` before raycasting is required, not optional: Task 3's characterization test found that three.js 0.180's `Raycaster` applies no `.visible` check of its own — without this filter, clicking exactly where a *hidden* species used to swim would still open its card.)
 
 - [ ] **Step 5: Clean up on `pagehide`**
 
