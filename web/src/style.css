@@ -118,7 +118,8 @@ body {
 }
 
 .sound-toggle,
-.settings-toggle {
+.settings-toggle,
+.catalog-toggle {
   pointer-events: auto;
   width: var(--aq-ui-size);
   height: var(--aq-ui-size);
@@ -140,7 +141,8 @@ body {
 }
 
 .overlay.is-ready .sound-toggle,
-.overlay.is-ready .settings-toggle {
+.overlay.is-ready .settings-toggle,
+.overlay.is-ready .catalog-toggle {
   opacity: 1;
 }
 
@@ -149,6 +151,15 @@ body {
 .settings-toggle:hover,
 .settings-toggle:focus-visible,
 .settings-toggle[aria-expanded="true"] {
+  border-color: rgba(191, 234, 255, 0.5);
+  background: rgba(10, 53, 80, 0.5);
+  color: var(--aq-mist);
+  outline: none;
+}
+
+.catalog-toggle:hover,
+.catalog-toggle:focus-visible,
+.catalog-toggle[aria-expanded="true"] {
   border-color: rgba(191, 234, 255, 0.5);
   background: rgba(10, 53, 80, 0.5);
   color: var(--aq-mist);
@@ -165,7 +176,8 @@ body {
 }
 
 .sound-toggle svg,
-.settings-toggle svg {
+.settings-toggle svg,
+.catalog-toggle svg {
   width: 1.25rem;
   height: 1.25rem;
   fill: none;
@@ -277,6 +289,143 @@ body {
   justify-self: end;
   font-variant-numeric: tabular-nums;
   color: var(--aq-mist);
+}
+
+/* Species catalog ("도감", §4.4 proposal) -------------------------------- */
+
+.species-catalog {
+  pointer-events: auto;
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: min(20rem, 86vw);
+  overflow-y: auto;
+  padding: clamp(4.5rem, 12vh, 6rem) 1.5rem 2rem;
+  background: rgba(4, 18, 31, 0.78);
+  backdrop-filter: blur(14px);
+  border-right: 1px solid rgba(191, 234, 255, 0.16);
+  transform: translateX(-100%);
+  transition: transform 0.4s var(--aq-ease);
+  font-size: 0.85rem;
+  color: var(--aq-foam);
+}
+
+.species-catalog.is-open {
+  transform: translateX(0);
+}
+
+.species-catalog__heading {
+  margin: 0 0 1rem;
+  font-size: 0.78rem;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  color: var(--aq-mist);
+}
+
+.species-catalog__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.species-catalog__item {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  font: inherit;
+  color: inherit;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  cursor: pointer;
+  text-align: left;
+}
+
+.species-catalog__item:hover,
+.species-catalog__item:focus-visible {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.24);
+  outline: none;
+}
+
+.species-catalog__mark {
+  font-size: 0.72rem;
+  opacity: 0.75;
+}
+
+/* Species info card (§4.4 proposal) --------------------------------------- */
+
+.species-card {
+  pointer-events: auto;
+  position: fixed;
+  left: 50%;
+  bottom: clamp(1rem, 4vh, 2rem);
+  transform: translate(-50%, 12px);
+  width: min(22rem, 90vw);
+  padding: 1rem 1.25rem;
+  background: rgba(4, 18, 31, 0.82);
+  backdrop-filter: blur(14px);
+  border: 1px solid rgba(191, 234, 255, 0.18);
+  border-radius: 0.9rem;
+  color: var(--aq-foam);
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity 0.3s var(--aq-ease),
+    transform 0.3s var(--aq-ease),
+    visibility 0.3s;
+}
+
+.species-card.is-open {
+  opacity: 1;
+  visibility: visible;
+  transform: translate(-50%, 0);
+}
+
+.species-card__header {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.species-card__name {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 500;
+  color: var(--aq-mist);
+  flex: 1;
+}
+
+.species-card__badge {
+  font-size: 0.7rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: rgba(191, 234, 255, 0.16);
+  color: var(--aq-mist);
+  white-space: nowrap;
+}
+
+.species-card__close {
+  background: none;
+  border: none;
+  color: inherit;
+  font-size: 1.3rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 0.25rem;
+}
+
+.species-card__description {
+  margin: 0.6rem 0 0;
+  font-size: 0.85rem;
+  line-height: 1.6;
 }
 
 /* Fallback notice --------------------------------------------------------- */
