@@ -29,8 +29,11 @@ function pushFin(buffers: MeshBuffers, a: Vector3, b: Vector3, c: Vector3, color
   pushTriangle(buffers, a, c, b, color);
 }
 
-function bodyRadius(t: number): number {
-  return 0.62 + 0.38 * Math.sin(Math.PI * t);
+/** Trunk cross-section radius; `ridgeAmplitude` layers a periodic bony-plate bulge on top. */
+export function seahorseBodyRadius(t: number, ridgeAmplitude: number): number {
+  const base = 0.62 + 0.38 * Math.sin(Math.PI * t);
+  const ridge = ridgeAmplitude * Math.abs(Math.sin(t * Math.PI * 8));
+  return base * (1 + ridge);
 }
 
 function ringVertex(center: Vector3, radius: number, index: number, sides: number): Vector3 {
@@ -40,6 +43,37 @@ function ringVertex(center: Vector3, radius: number, index: number, sides: numbe
     center.y,
     center.z + Math.sin(angle) * radius,
   );
+}
+
+/** Coronet (crown) spikes on top of the head; empty when `coronetHeight` is 0. */
+export function seahorseCoronetSpikes(
+  shape: SeahorseShape,
+): Array<{ a: Vector3; b: Vector3; tip: Vector3 }> {
+  if (shape.coronetHeight <= 0) return [];
+  const headY = shape.height * 0.42;
+  const spikes: Array<{ a: Vector3; b: Vector3; tip: Vector3 }> = [];
+  for (let i = 0; i < 3; i += 1) {
+    const t = i / 2 - 0.5;
+    const baseX = t * shape.width * 0.5;
+    spikes.push({
+      a: new Vector3(baseX - shape.width * 0.16, headY + shape.width * 0.2, 0),
+      b: new Vector3(baseX + shape.width * 0.16, headY + shape.width * 0.2, 0),
+      tip: new Vector3(baseX, headY + shape.width * 0.2 + shape.coronetHeight, 0),
+    });
+  }
+  return spikes;
+}
+
+/** Dorsal fin control points, mounted mid-trunk on the back (away from the snout). */
+export function seahorseDorsalFin(
+  shape: SeahorseShape,
+): { root: Vector3; tip: Vector3; base: Vector3 } {
+  const root = new Vector3(-shape.width * 0.5, shape.height * 0.1, 0);
+  return {
+    root,
+    tip: new Vector3(-shape.width * 0.5 - shape.dorsalFinHeight, shape.height * 0.22, 0),
+    base: new Vector3(-shape.width * 0.5, -shape.height * 0.08, 0),
+  };
 }
 
 /** Build an upright seahorse: vertical torso, +X-facing snout, and curled tail. */
@@ -60,8 +94,8 @@ export function buildSeahorseGeometry(
     const t1 = (segment + 1) / profile.bodySegments;
     const center0 = new Vector3(0, bottom + shape.height * t0, 0);
     const center1 = new Vector3(0, bottom + shape.height * t1, 0);
-    const radius0 = shape.width * bodyRadius(t0);
-    const radius1 = shape.width * bodyRadius(t1);
+    const radius0 = shape.width * seahorseBodyRadius(t0, shape.ridgeAmplitude);
+    const radius1 = shape.width * seahorseBodyRadius(t1, shape.ridgeAmplitude);
     const color = segment === profile.bodySegments - 1 ? accent : body;
     for (let side = 0; side < profile.ringSides; side += 1) {
       const a = ringVertex(center0, radius0, side, profile.ringSides);
@@ -126,6 +160,13 @@ export function buildSeahorseGeometry(
     new Vector3(shape.width * 0.52, -shape.height * 0.12, 0),
     fin,
   );
+
+  for (const spike of seahorseCoronetSpikes(shape)) {
+    pushFin(buffers, spike.a, spike.b, spike.tip, accent);
+  }
+
+  const dorsalFin = seahorseDorsalFin(shape);
+  pushFin(buffers, dorsalFin.root, dorsalFin.tip, dorsalFin.base, fin);
 
   const geometry = new BufferGeometry();
   geometry.setAttribute("position", new BufferAttribute(new Float32Array(buffers.positions), 3));

@@ -132,6 +132,14 @@ export interface SharkShape {
   readonly width: number;
   readonly tailSpan: number;
   readonly dorsalFinHeight: number;
+  /** Lower caudal lobe span as a fraction of `tailSpan`; 1 = symmetric, lower = more heterocercal (SPEC §6.2.1 reference art). */
+  readonly tailAsymmetry: number;
+  /** Exponent for the nose radius falloff; higher = sharper, more conical snout. */
+  readonly snoutTaper: number;
+  /** Count of accent-coloured gill-slit notches behind the head. */
+  readonly gillSlits: number;
+  /** 0..1: how far the pectoral fin tip sweeps back toward the tail. */
+  readonly pectoralSweep: number;
 }
 
 /** Silhouette parameters for a vertical seahorse body plan. */
@@ -143,6 +151,12 @@ export interface SeahorseShape {
   readonly snoutLength: number;
   readonly curlRadius: number;
   readonly finSpan: number;
+  /** Height of the coronet (crown) spikes on top of the head; 0 = none. */
+  readonly coronetHeight: number;
+  /** Amplitude of the periodic bony-plate bulge running down the trunk; 0 = smooth. */
+  readonly ridgeAmplitude: number;
+  /** How far the back-mounted dorsal fin extends from the trunk. */
+  readonly dorsalFinHeight: number;
 }
 
 /** Silhouette parameters for a turtle shell and four flippers. */
@@ -156,6 +170,14 @@ export interface TurtleShape {
   readonly length: number;
   readonly height: number;
   readonly width: number;
+  /** Height of the raised centerline ridge running down the shell's spine; 0 = smooth dome. */
+  readonly shellKeelHeight: number;
+  /** Fraction of the shell length, at each end, painted with the accent colour as a rim/scute trim. */
+  readonly shellRimWidth: number;
+  /** 0..1: how much the beak pinches narrower at its midsection; 1 = straight wedge. */
+  readonly headTaper: number;
+  /** 0..1: how far the flippers sweep back toward the tail. */
+  readonly flipperSweep: number;
 }
 
 export type CreatureVariant =
@@ -267,7 +289,17 @@ export const FISH_REGISTRY: readonly FishSpecies[] = [
     geometry: "lowpoly-shark",
     palette: { body: "#7894a5", fin: "#405563", accent: "#d9edf5" },
     behavior: { speed: 0.9, locomotion: "swim", schooling: false, activityRadius: 10.5 },
-    shape: { length: 1.45, height: 0.5, width: 0.26, tailSpan: 0.62, dorsalFinHeight: 0.42 },
+    shape: {
+      length: 1.45,
+      height: 0.5,
+      width: 0.26,
+      tailSpan: 0.62,
+      dorsalFinHeight: 0.42,
+      tailAsymmetry: 0.45,
+      snoutTaper: 1.1,
+      gillSlits: 4,
+      pectoralSweep: 0.5,
+    },
     count: 2,
   },
   {
@@ -283,7 +315,17 @@ export const FISH_REGISTRY: readonly FishSpecies[] = [
       hoverAmplitude: 0.22,
       hoverFrequency: 0.16,
     },
-    shape: { length: 1.1, height: 1.1, width: 0.2, snoutLength: 0.32, curlRadius: 0.28, finSpan: 0.26 },
+    shape: {
+      length: 1.1,
+      height: 1.1,
+      width: 0.2,
+      snoutLength: 0.32,
+      curlRadius: 0.28,
+      finSpan: 0.26,
+      coronetHeight: 0.1,
+      ridgeAmplitude: 0.2,
+      dorsalFinHeight: 0.16,
+    },
     count: 2,
   },
   {
@@ -301,6 +343,10 @@ export const FISH_REGISTRY: readonly FishSpecies[] = [
       length: 1.25,
       height: 0.7,
       width: 0.95,
+      shellKeelHeight: 0.22,
+      shellRimWidth: 0.14,
+      headTaper: 0.5,
+      flipperSweep: 0.4,
     },
     count: 2,
   },

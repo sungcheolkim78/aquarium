@@ -18,6 +18,25 @@ import {
   FishSchool,
   type Boid,
 } from "./fish";
+import {
+  buildSharkGeometry,
+  sharkBodyRadius,
+  sharkGillSlits,
+  sharkPectoralFin,
+  sharkTailLobes,
+} from "./creatures/geometry/shark";
+import {
+  buildSeahorseGeometry,
+  seahorseBodyRadius,
+  seahorseCoronetSpikes,
+  seahorseDorsalFin,
+} from "./creatures/geometry/seahorse";
+import {
+  buildTurtleGeometry,
+  turtleFlipperPoints,
+  turtleHeadPoints,
+  turtleShellHeightScale,
+} from "./creatures/geometry/turtle";
 
 const HEX = /^#[0-9a-f]{6}$/i;
 
@@ -322,6 +341,104 @@ describe("buildCreatureGeometry shark variant", () => {
   });
 });
 
+describe("shark realism parameters", () => {
+  const baseShape = {
+    length: 1.4,
+    height: 0.5,
+    width: 0.26,
+    tailSpan: 0.6,
+    dorsalFinHeight: 0.4,
+    tailAsymmetry: 1,
+    snoutTaper: 0.72,
+    gillSlits: 0,
+    pectoralSweep: 0,
+  };
+  const palette = { body: "#000000", fin: "#000000", accent: "#ffffff" };
+
+  it("sharkBodyRadius: a higher snoutTaper yields a sharper (smaller) nose radius near the tip", () => {
+    const t = 0.15;
+    const blunt = sharkBodyRadius(t, 0.5);
+    const sharp = sharkBodyRadius(t, 1.4);
+    expect(sharp).toBeLessThan(blunt);
+  });
+
+  it("sharkTailLobes: tailAsymmetry < 1 makes the upper lobe reach further than the lower lobe", () => {
+    const symmetric = sharkTailLobes({ ...baseShape, tailAsymmetry: 1 });
+    expect(symmetric.upperTip.y).toBeCloseTo(-symmetric.lowerTip.y, 5);
+
+    const asymmetric = sharkTailLobes({ ...baseShape, tailAsymmetry: 0.4 });
+    expect(asymmetric.upperTip.y).toBeGreaterThan(Math.abs(asymmetric.lowerTip.y) * 1.5);
+  });
+
+  it("sharkPectoralFin: pectoralSweep pulls the fin tip toward the tail", () => {
+    const straight = sharkPectoralFin({ ...baseShape, pectoralSweep: 0 });
+    const swept = sharkPectoralFin({ ...baseShape, pectoralSweep: 0.6 });
+    expect(swept.tip.x).toBeLessThan(straight.tip.x);
+  });
+
+  it("sharkGillSlits: returns one accent-colored notch triangle per requested slit", () => {
+    expect(sharkGillSlits({ ...baseShape, gillSlits: 0 })).toHaveLength(0);
+    expect(sharkGillSlits({ ...baseShape, gillSlits: 4 })).toHaveLength(4);
+  });
+
+  it("buildSharkGeometry: adds exactly 6 vertices per gill slit and stays finite", () => {
+    const none = buildSharkGeometry({ ...baseShape, gillSlits: 0 }, palette);
+    const withGills = buildSharkGeometry({ ...baseShape, gillSlits: 3 }, palette);
+    expect(withGills.getAttribute("position").count - none.getAttribute("position").count).toBe(3 * 6);
+    for (const value of withGills.getAttribute("position").array) expect(Number.isFinite(value)).toBe(true);
+    none.dispose();
+    withGills.dispose();
+  });
+});
+
+describe("seahorse realism parameters", () => {
+  const baseShape = {
+    length: 1.1,
+    height: 1.1,
+    width: 0.2,
+    snoutLength: 0.32,
+    curlRadius: 0.28,
+    finSpan: 0.26,
+    coronetHeight: 0,
+    ridgeAmplitude: 0,
+    dorsalFinHeight: 0.2,
+  };
+  const palette = { body: "#000000", fin: "#000000", accent: "#ffffff" };
+
+  it("seahorseBodyRadius: ridgeAmplitude adds a periodic bony-plate bulge along the trunk", () => {
+    const smooth = seahorseBodyRadius(0.3, 0);
+    const ridged = seahorseBodyRadius(0.3, 0.5);
+    expect(ridged).not.toBeCloseTo(smooth, 5);
+  });
+
+  it("seahorseCoronetSpikes: no spikes when coronetHeight is 0, three raised above the head otherwise", () => {
+    expect(seahorseCoronetSpikes({ ...baseShape, coronetHeight: 0 })).toHaveLength(0);
+    const spikes = seahorseCoronetSpikes({ ...baseShape, coronetHeight: 0.2 });
+    expect(spikes).toHaveLength(3);
+    for (const spike of spikes) expect(spike.tip.y).toBeGreaterThan(baseShape.height * 0.42);
+  });
+
+  it("seahorseDorsalFin: dorsalFinHeight controls how far the back fin extends", () => {
+    const small = seahorseDorsalFin({ ...baseShape, dorsalFinHeight: 0.1 });
+    const large = seahorseDorsalFin({ ...baseShape, dorsalFinHeight: 0.4 });
+    const span = (fin: typeof small): number => fin.tip.distanceTo(fin.root);
+    expect(span(large)).toBeGreaterThan(span(small));
+  });
+
+  it("buildSeahorseGeometry: stays finite and grows with coronet spikes", () => {
+    const none = buildSeahorseGeometry({ ...baseShape, coronetHeight: 0 }, palette);
+    const withCoronet = buildSeahorseGeometry({ ...baseShape, coronetHeight: 0.2 }, palette);
+    expect(withCoronet.getAttribute("position").count).toBeGreaterThan(
+      none.getAttribute("position").count,
+    );
+    for (const value of withCoronet.getAttribute("position").array) {
+      expect(Number.isFinite(value)).toBe(true);
+    }
+    none.dispose();
+    withCoronet.dispose();
+  });
+});
+
 describe("buildCreatureGeometry seahorse variant", () => {
   it("builds a vertical, finite seahorse with a curled tail", () => {
     const seahorse = FISH_REGISTRY.find((species) => species.geometry === "lowpoly-seahorse");
@@ -344,6 +461,57 @@ describe("buildCreatureGeometry seahorse variant", () => {
     );
     expect(Math.max(...zValues) - Math.min(...zValues)).toBeGreaterThan(0.1);
     geometry.dispose();
+  });
+});
+
+describe("turtle realism parameters", () => {
+  const baseShape = {
+    shellLength: 1.05,
+    shellWidth: 0.72,
+    shellHeight: 0.32,
+    flipperSpan: 0.62,
+    headLength: 0.24,
+    length: 1.25,
+    height: 0.7,
+    width: 0.95,
+    shellKeelHeight: 0,
+    shellRimWidth: 0,
+    headTaper: 1,
+    flipperSweep: 0,
+  };
+  const palette = { body: "#000000", fin: "#000000", accent: "#ffffff" };
+
+  it("turtleShellHeightScale: shellKeelHeight raises the shell's centerline ridge", () => {
+    const flat = turtleShellHeightScale(0.5, 0);
+    const keeled = turtleShellHeightScale(0.5, 0.3);
+    expect(keeled).toBeGreaterThan(flat);
+  });
+
+  it("turtleHeadPoints: headTaper pinches the beak's midsection narrower than a straight wedge", () => {
+    const straight = turtleHeadPoints({ ...baseShape, headTaper: 1 });
+    const beaked = turtleHeadPoints({ ...baseShape, headTaper: 0.3 });
+    expect(Math.abs(beaked.mid.top.z)).toBeLessThan(Math.abs(straight.mid.top.z));
+  });
+
+  it("turtleFlipperPoints: flipperSweep pulls the front flipper tip rearward", () => {
+    const straight = turtleFlipperPoints({ ...baseShape, flipperSweep: 0 }, "front", 1);
+    const swept = turtleFlipperPoints({ ...baseShape, flipperSweep: 0.8 }, "front", 1);
+    expect(swept.tip.x).toBeLessThan(straight.tip.x);
+  });
+
+  it("buildTurtleGeometry: shellRimWidth paints accent-coloured vertices along the shell edge", () => {
+    const noRim = buildTurtleGeometry({ ...baseShape, shellRimWidth: 0 }, palette);
+    const rimmed = buildTurtleGeometry({ ...baseShape, shellRimWidth: 0.3 }, palette);
+    const countAccent = (g: typeof noRim): number => {
+      const color = g.getAttribute("color");
+      let count = 0;
+      for (let i = 0; i < color.count; i += 1) if (color.getX(i) > 0.5) count += 1;
+      return count;
+    };
+    expect(countAccent(rimmed)).toBeGreaterThan(countAccent(noRim));
+    for (const value of rimmed.getAttribute("position").array) expect(Number.isFinite(value)).toBe(true);
+    noRim.dispose();
+    rimmed.dispose();
   });
 });
 
