@@ -239,6 +239,15 @@ export interface AquariumSettings {
     /** Multiplies `SCENE.bubbles.count`. */
     readonly densityScale: number;
   };
+  readonly camera: {
+    readonly mode: "drift" | "fixed";
+  };
+  readonly performance: {
+    readonly powerSave: boolean;
+  };
+  readonly audio: {
+    readonly volume: number;
+  };
 }
 
 /** Clamp ranges for each numeric settings field (SPEC §6.5.2). */
@@ -247,6 +256,7 @@ export const SETTINGS_LIMITS = {
   background: { objectCountScale: { min: 0.5, max: 2.0 } },
   lighting: { intensityScale: { min: 0.4, max: 1.6 } },
   bubbles: { densityScale: { min: 0, max: 2.0 } },
+  audio: { volume: { min: 0, max: 1 } },
 } as const;
 
 /**
@@ -264,6 +274,9 @@ export const DEFAULT_SETTINGS: AquariumSettings = {
   background: { detail: "medium", objectCountScale: 1 },
   lighting: { intensityScale: 1, caustics: true },
   bubbles: { enabled: true, densityScale: 1 },
+  camera: { mode: "drift" },
+  performance: { powerSave: false },
+  audio: { volume: 0.16 },
 };
 
 /** Scene-wide tuning tokens (palette mirrored in `style.css`). */

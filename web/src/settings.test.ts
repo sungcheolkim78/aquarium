@@ -16,10 +16,13 @@ import {
   sanitizeSettings,
   withBackgroundObjectCountScale,
   withBubblesDensityScale,
+  withCameraMode,
   withCaustics,
   withFishCountScale,
   withFishDetail,
+  withPowerSave,
   withSpeciesEnabled,
+  withVolume,
 } from "./settings";
 
 /** Minimal in-memory stand-in for `Storage` (no DOM/localStorage in the test env). */
@@ -212,5 +215,58 @@ describe("loadSettings/saveSettings with unavailable storage", () => {
 
   it("saveSettings no-ops without throwing when storage is undefined", () => {
     expect(() => saveSettings(DEFAULT_SETTINGS, undefined)).not.toThrow();
+  });
+});
+
+describe("camera/performance/audio reducers (SPEC §6.5.2 v1.2)", () => {
+  it("withCameraMode replaces only camera.mode", () => {
+    const next = withCameraMode(DEFAULT_SETTINGS, "fixed");
+    expect(next.camera.mode).toBe("fixed");
+    expect(next.lighting).toEqual(DEFAULT_SETTINGS.lighting);
+  });
+
+  it("withPowerSave replaces only performance.powerSave", () => {
+    const next = withPowerSave(DEFAULT_SETTINGS, true);
+    expect(next.performance.powerSave).toBe(true);
+    expect(next.fish).toEqual(DEFAULT_SETTINGS.fish);
+  });
+
+  it("withVolume clamps to SETTINGS_LIMITS.audio.volume", () => {
+    expect(withVolume(DEFAULT_SETTINGS, 999).audio.volume).toBe(SETTINGS_LIMITS.audio.volume.max);
+    expect(withVolume(DEFAULT_SETTINGS, -1).audio.volume).toBe(SETTINGS_LIMITS.audio.volume.min);
+  });
+});
+
+describe("sanitizeSettings for camera/performance/audio (SPEC §6.5.2 v1.2)", () => {
+  it("falls back to defaults for missing/invalid camera.mode, performance.powerSave, audio.volume", () => {
+    const sanitized = sanitizeSettings({
+      schemaVersion: 1,
+      fish: { enabledSpecies: {}, detail: "medium", countScale: 1 },
+      background: { detail: "medium", objectCountScale: 1 },
+      lighting: { intensityScale: 1, caustics: true },
+      bubbles: { enabled: true, densityScale: 1 },
+      camera: { mode: "not-a-mode" },
+      performance: { powerSave: "yes" },
+      audio: { volume: -5 },
+    });
+    expect(sanitized?.camera.mode).toBe(DEFAULT_SETTINGS.camera.mode);
+    expect(sanitized?.performance.powerSave).toBe(DEFAULT_SETTINGS.performance.powerSave);
+    expect(sanitized?.audio.volume).toBe(SETTINGS_LIMITS.audio.volume.min);
+  });
+
+  it("round-trips valid camera/performance/audio values", () => {
+    const sanitized = sanitizeSettings({
+      schemaVersion: 1,
+      fish: { enabledSpecies: {}, detail: "medium", countScale: 1 },
+      background: { detail: "medium", objectCountScale: 1 },
+      lighting: { intensityScale: 1, caustics: true },
+      bubbles: { enabled: true, densityScale: 1 },
+      camera: { mode: "fixed" },
+      performance: { powerSave: true },
+      audio: { volume: 0.5 },
+    });
+    expect(sanitized?.camera.mode).toBe("fixed");
+    expect(sanitized?.performance.powerSave).toBe(true);
+    expect(sanitized?.audio.volume).toBe(0.5);
   });
 });

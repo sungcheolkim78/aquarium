@@ -51,6 +51,10 @@ function isDetailLevel(value: unknown): value is DetailLevel {
   return value === "low" || value === "medium" || value === "high";
 }
 
+function isCameraMode(value: unknown): value is "drift" | "fixed" {
+  return value === "drift" || value === "fixed";
+}
+
 function asRecord(value: unknown): Record<string, unknown> {
   return typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {};
 }
@@ -87,6 +91,9 @@ export function sanitizeSettings(
   const background = asRecord(value.background);
   const lighting = asRecord(value.lighting);
   const bubbles = asRecord(value.bubbles);
+  const camera = asRecord(value.camera);
+  const performance = asRecord(value.performance);
+  const audio = asRecord(value.audio);
 
   return {
     schemaVersion: 1,
@@ -125,6 +132,23 @@ export function sanitizeSettings(
         SETTINGS_LIMITS.bubbles.densityScale.min,
         SETTINGS_LIMITS.bubbles.densityScale.max,
         DEFAULT_SETTINGS.bubbles.densityScale,
+      ),
+    },
+    camera: {
+      mode: isCameraMode(camera.mode) ? camera.mode : DEFAULT_SETTINGS.camera.mode,
+    },
+    performance: {
+      powerSave:
+        typeof performance.powerSave === "boolean"
+          ? performance.powerSave
+          : DEFAULT_SETTINGS.performance.powerSave,
+    },
+    audio: {
+      volume: clampNumber(
+        audio.volume,
+        SETTINGS_LIMITS.audio.volume.min,
+        SETTINGS_LIMITS.audio.volume.max,
+        DEFAULT_SETTINGS.audio.volume,
       ),
     },
   };
@@ -280,6 +304,27 @@ export function withBubblesDensityScale(
   };
 }
 
+export function withCameraMode(
+  settings: AquariumSettings,
+  mode: AquariumSettings["camera"]["mode"],
+): AquariumSettings {
+  return { ...settings, camera: { ...settings.camera, mode } };
+}
+
+export function withPowerSave(settings: AquariumSettings, powerSave: boolean): AquariumSettings {
+  return { ...settings, performance: { ...settings.performance, powerSave } };
+}
+
+export function withVolume(settings: AquariumSettings, volume: number): AquariumSettings {
+  return {
+    ...settings,
+    audio: {
+      ...settings.audio,
+      volume: clampNumber(volume, SETTINGS_LIMITS.audio.volume.min, SETTINGS_LIMITS.audio.volume.max, settings.audio.volume),
+    },
+  };
+}
+
 /** The most demanding combination reachable from the settings panel (SPEC §6.5.6, AC-7). */
 export const MAX_SETTINGS: AquariumSettings = {
   schemaVersion: 1,
@@ -291,6 +336,9 @@ export const MAX_SETTINGS: AquariumSettings = {
   background: { detail: "high", objectCountScale: SETTINGS_LIMITS.background.objectCountScale.max },
   lighting: { intensityScale: SETTINGS_LIMITS.lighting.intensityScale.max, caustics: true },
   bubbles: { enabled: true, densityScale: SETTINGS_LIMITS.bubbles.densityScale.max },
+  camera: { mode: "drift" },
+  performance: { powerSave: false },
+  audio: { volume: SETTINGS_LIMITS.audio.volume.max },
 };
 
 /**
