@@ -250,8 +250,12 @@ function boot(): void {
   };
   document.addEventListener("visibilitychange", onVisibilityChange);
 
-  window.addEventListener("pagehide", () => {
+  window.addEventListener("pagehide", (event) => {
     renderer.setAnimationLoop(null);
+    rebuildFishDetail.cancel();
+    rebuildFishCount.cancel();
+    rebuildBackground.cancel();
+    if (event.persisted) return; // may return via `pageshow` from the bfcache — keep GPU resources alive
     window.removeEventListener("resize", onResize);
     document.removeEventListener("visibilitychange", onVisibilityChange);
     for (const school of schools) school.dispose();
@@ -260,6 +264,15 @@ function boot(): void {
     ui.dispose();
     settingsPanel.dispose();
     renderer.dispose();
+  });
+
+  window.addEventListener("pageshow", (event) => {
+    if (!event.persisted) return;
+    clock.getDelta(); // discard the time spent frozen in the cache
+    sampleTime = 0;
+    sampleFrames = 0;
+    lowFpsTime = 0;
+    renderer.setAnimationLoop(frame);
   });
 }
 
