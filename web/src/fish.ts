@@ -240,6 +240,8 @@ export interface Boid {
   readonly velocity: Vector3;
   /** Per-instance phase offset for the tail-sway shader. */
   readonly phase: number;
+  /** Stable position used as the anchor for non-swimming creatures. */
+  readonly hoverOrigin: Vector3;
 }
 
 /** Mean position of a school; returns the origin for an empty school. */
@@ -353,6 +355,11 @@ transformed.z += swayWave * swayWeight * swayWeight * ${(species.shape.length * 
   /** Advance the school. `dt` seconds, `elapsed` seconds since start. */
   update(dt: number, elapsed: number): void {
     this.timeUniform.value = elapsed;
+    if (this.species.behavior.locomotion === "hover") {
+      this.updateHover(elapsed);
+      this.writeMatrices();
+      return;
+    }
     const { speed, schooling } = this.species.behavior;
     const active = this.mesh.count;
     const school = this.boids.slice(0, active);
@@ -479,17 +486,32 @@ transformed.z += swayWave * swayWeight * swayWeight * ${(species.shape.length * 
     const phase = rng() * Math.PI * 2;
     const angle = rng() * Math.PI * 2;
     const dist = radius * (0.35 + 0.6 * rng());
-    return {
-      position: new Vector3(
+    const position = new Vector3(
         Math.cos(angle) * dist,
         SCENE.floorY + 2.2 + rng() * (SCENE.bounds.y * 1.4),
         Math.sin(angle) * dist,
-      ),
+      );
+    return {
+      position,
       velocity: new Vector3(rng() - 0.5, (rng() - 0.5) * 0.25, rng() - 0.5)
         .normalize()
         .multiplyScalar(this.species.behavior.speed),
       phase,
+      hoverOrigin: position.clone(),
     };
+  }
+
+  private updateHover(elapsed: number): void {
+    const amplitude = this.species.behavior.hoverAmplitude ?? 0.18;
+    const frequency = this.species.behavior.hoverFrequency ?? 0.18;
+    for (let i = 0; i < this.mesh.count; i += 1) {
+      const boid = this.boids[i];
+      if (!boid) continue;
+      boid.position.x = boid.hoverOrigin.x;
+      boid.position.z = boid.hoverOrigin.z;
+      boid.position.y = boid.hoverOrigin.y + Math.sin(elapsed * frequency * Math.PI * 2 + boid.phase) * amplitude;
+      boid.velocity.set(0, 0, 0);
+    }
   }
 
   private writePhaseAttribute(): void {

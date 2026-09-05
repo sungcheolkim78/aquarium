@@ -64,6 +64,8 @@ aquarium/
         └── fish.test.ts    # 생물 geometry 및 시뮬레이션 단위 테스트
 ```
 
+현재 registry에는 물고기와 상어가 있으며, 학교 시뮬레이션은 수영(`swim`)과 제자리 부유(`hover`) locomotion을 지원합니다. 거북이·해마 전용 geometry는 후속 확장 대상입니다.
+
 ---
 
 ## 🚀 실행 방법

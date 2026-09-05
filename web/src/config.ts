@@ -146,8 +146,12 @@ interface CreatureDefinition {
   readonly behavior: {
     /** Base swim speed in world units per second. */
     readonly speed: number;
-    /** Movement model; sharks currently reuse the existing swimming behavior. */
-    readonly locomotion: "swim";
+    /** Movement model used by the shared creature school. */
+    readonly locomotion: "swim" | "hover";
+    /** Vertical hover displacement in world units; used only by `hover`. */
+    readonly hoverAmplitude?: number;
+    /** Hover oscillation frequency in cycles per second; used only by `hover`. */
+    readonly hoverFrequency?: number;
     /** Whether individuals steer toward their school centroid. */
     readonly schooling: boolean;
     /** Radius of the roaming volume around the reef centre. */

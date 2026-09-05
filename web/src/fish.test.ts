@@ -22,7 +22,8 @@ import {
 const HEX = /^#[0-9a-f]{6}$/i;
 
 function boid(x: number, y: number, z: number): Boid {
-  return { position: new Vector3(x, y, z), velocity: new Vector3(1, 0, 0), phase: 0 };
+  const position = new Vector3(x, y, z);
+  return { position, velocity: new Vector3(1, 0, 0), phase: 0, hoverOrigin: position.clone() };
 }
 
 describe("fish registry", () => {
@@ -441,6 +442,38 @@ describe("FishSchool", () => {
     expect(school.visibleCount).toBeLessThan(species.count);
     school.setPopulationScale(1);
     expect(school.visibleCount).toBe(species.count);
+    school.dispose();
+  });
+
+  it("keeps hover creatures anchored while gently oscillating vertically", () => {
+    const base = FISH_REGISTRY[0] as Extract<FishSpecies, { geometry: "lowpoly-fish" }>;
+    const hoverSpecies: FishSpecies = {
+      ...base,
+      id: "test-hover-creature",
+      behavior: {
+        ...base.behavior,
+        locomotion: "hover",
+        schooling: false,
+        hoverAmplitude: 0.4,
+        hoverFrequency: 1,
+      },
+    };
+    const school = new FishSchool(hoverSpecies, createRng(17));
+    const initial = school.mesh.instanceMatrix.array.slice();
+    school.update(0.1, 0.5);
+    const moved = school.mesh.instanceMatrix.array.slice();
+    school.update(0.1, 1.25);
+    const later = school.mesh.instanceMatrix.array.slice();
+
+    for (let i = 0; i < school.mesh.count; i += 1) {
+      const offset = i * 16;
+      expect(moved[offset + 12] ?? 0).toBeCloseTo(initial[offset + 12] ?? 0);
+      expect(moved[offset + 14] ?? 0).toBeCloseTo(initial[offset + 14] ?? 0);
+      expect(later[offset + 12] ?? 0).toBeCloseTo(initial[offset + 12] ?? 0);
+      expect(later[offset + 14] ?? 0).toBeCloseTo(initial[offset + 14] ?? 0);
+    }
+    expect(moved[13] ?? 0).not.toBeCloseTo(initial[13] ?? 0);
+    expect(later[13] ?? 0).not.toBeCloseTo(moved[13] ?? 0);
     school.dispose();
   });
 });
