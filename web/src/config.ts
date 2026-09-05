@@ -190,6 +190,8 @@ interface CreatureDefinition {
   readonly id: string;
   /** Human readable Korean name shown nowhere in v1 UI, kept for v2 labels. */
   readonly label: string;
+  /** One or two sentences describing the model's look/behavior for the species-info card (§4.4) — design-flavor only, never a validated biological claim. */
+  readonly description: string;
   readonly palette: {
     readonly body: string;
     readonly fin: string;
@@ -239,6 +241,7 @@ export const FISH_REGISTRY: readonly FishSpecies[] = [
   {
     id: "clownfish",
     label: "클라운피시",
+    description: "주황빛 몸에 하얀 줄무늬가 있는 작은 물고기예요. 무리를 지어 산호 밭 주변을 얌전히 맴돌아요.",
     geometry: "lowpoly-fish",
     palette: { body: "#f2761b", fin: "#c84a09", accent: "#fff3e0" },
     behavior: {
@@ -257,6 +260,7 @@ export const FISH_REGISTRY: readonly FishSpecies[] = [
   {
     id: "blue-sea-bream",
     label: "파랑참돔",
+    description: "푸른빛이 도는 매끈한 몸을 가진 물고기예요. 무리를 지어 넓은 수역을 여유롭게 오가요.",
     geometry: "lowpoly-fish",
     palette: { body: "#2f7fd1", fin: "#1b4f87", accent: "#bfe3ff" },
     behavior: {
@@ -275,6 +279,7 @@ export const FISH_REGISTRY: readonly FishSpecies[] = [
   {
     id: "yellow-tang",
     label: "노란열대어",
+    description: "샛노란 몸빛이 눈에 띄는 납작한 물고기예요. 한 산호 근처를 정해두고 그 주변을 잘 벗어나지 않아요.",
     geometry: "lowpoly-fish",
     palette: { body: "#f5c11d", fin: "#d19206", accent: "#fff8d0" },
     behavior: {
@@ -295,6 +300,7 @@ export const FISH_REGISTRY: readonly FishSpecies[] = [
     // Disc-shaped reef fish with a dark eye band (reference: poly_fish_1).
     id: "butterflyfish",
     label: "나비치",
+    description: "원반 모양 몸에 눈 주위로 짙은 띠무늬가 있는 물고기예요. 혼자 산호 곁을 서성이며 지내요.",
     geometry: "lowpoly-fish",
     palette: { body: "#f2d531", fin: "#4a5560", accent: "#20272c" },
     behavior: {
@@ -315,6 +321,7 @@ export const FISH_REGISTRY: readonly FishSpecies[] = [
     // Violet body with bright yellow fins (reference: poly_fish_2).
     id: "purple-tang",
     label: "보라탱",
+    description: "보라색 몸에 샛노란 지느러미가 대비되는 물고기예요. 자기 구역의 산호를 좀처럼 벗어나지 않아요.",
     geometry: "lowpoly-fish",
     palette: { body: "#5b4fd6", fin: "#f5c11d", accent: "#cfe6ff" },
     behavior: {
@@ -335,6 +342,7 @@ export const FISH_REGISTRY: readonly FishSpecies[] = [
     // Small pink fish that darts around in a tight school (reference: poly_fish_2).
     id: "pink-cardinalfish",
     label: "자주열대어",
+    description: "자줏빛이 도는 아주 작은 물고기예요. 촘촘한 무리를 이루어 빠르게 움직여요.",
     geometry: "lowpoly-fish",
     palette: { body: "#e8557f", fin: "#b23a5e", accent: "#ffd3e0" },
     behavior: {
@@ -353,6 +361,7 @@ export const FISH_REGISTRY: readonly FishSpecies[] = [
   {
     id: "great-white-shark",
     label: "백상아리",
+    description: "몸집이 큰 회청색 헤엄손님이에요. 방향을 크고 느리게 틀며 넓은 구역을 순찰하듯 돌아요.",
     geometry: "lowpoly-shark",
     palette: { body: "#7894a5", fin: "#405563", accent: "#d9edf5" },
     behavior: {
@@ -381,6 +390,7 @@ export const FISH_REGISTRY: readonly FishSpecies[] = [
   {
     id: "seahorse",
     label: "해마",
+    description: "몸을 세운 채 헤엄치는 분홍빛 생물이에요. 꼬리를 산호에 말아 붙잡고 한자리에 머물러요.",
     geometry: "lowpoly-seahorse",
     palette: { body: "#d184a5", fin: "#a9587e", accent: "#f4c3d3" },
     behavior: {
@@ -407,6 +417,7 @@ export const FISH_REGISTRY: readonly FishSpecies[] = [
   {
     id: "green-sea-turtle",
     label: "푸른바다거북",
+    description: "둥근 등딱지를 지닌 큰 생물이에요. 네 다리로 천천히 헤엄치며 수면 가까이를 오가요.",
     geometry: "lowpoly-turtle",
     palette: { body: "#4e9b78", fin: "#2f665a", accent: "#b9d58a" },
     behavior: {

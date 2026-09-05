@@ -58,6 +58,12 @@ describe("creature registry", () => {
       expect(species.behavior.maxTurnRate).toBeGreaterThan(0);
     }
   });
+
+  it("gives every species a non-empty description for the species-info card (§4.4)", () => {
+    for (const species of FISH_REGISTRY) {
+      expect(species.description.trim().length).toBeGreaterThan(0);
+    }
+  });
 });
 
 describe("SCENE.coral avoidance", () => {
