@@ -7,6 +7,7 @@
  */
 
 import { loadFishSpeciesFromYaml } from "./creatures/species/fish";
+import { loadEnvironmentPresetsFromYaml } from "./scenePresets";
 
 /** Procedural geometry builders available to the registry. */
 export type CreatureGeometryId =
@@ -521,6 +522,52 @@ export const MOOD_PRESETS: Record<PresetId, MoodPreset> = {
   },
 };
 
+/** One named "location" color scheme — water/light/floor/coral/seaweed/bubble hues (docs/superpowers/specs/2026-09-06-environment-color-presets-design.md). */
+export interface EnvironmentPreset {
+  readonly id: string;
+  readonly label: string;
+  readonly description: string;
+  readonly water: {
+    readonly fogColor: string;
+    readonly fogDensity: number;
+    readonly backgroundColor: string;
+  };
+  readonly lighting: {
+    readonly hemisphereSky: string;
+    readonly hemisphereGround: string;
+    readonly sun: string;
+    readonly rim: string;
+  };
+  readonly caustics: { readonly tint: string };
+  readonly godRays: { readonly tint: string; readonly opacity: number };
+  readonly floor: { readonly deep: string; readonly sand: string };
+  readonly coral: { readonly colors: readonly string[] };
+  readonly seaweed: { readonly root: string; readonly tip: string };
+  readonly bubbles: { readonly tint: string };
+}
+
+const LOADED_ENVIRONMENT_PRESETS = loadEnvironmentPresetsFromYaml();
+
+/** Every environment preset, keyed by id. */
+export const ENVIRONMENT_PRESETS: Record<string, EnvironmentPreset> = Object.fromEntries(
+  LOADED_ENVIRONMENT_PRESETS.map((preset) => [preset.id, preset]),
+);
+
+export const DEFAULT_ENVIRONMENT_PRESET_ID = "great_barrier_reef";
+
+const defaultEnvironmentPreset = ENVIRONMENT_PRESETS[DEFAULT_ENVIRONMENT_PRESET_ID];
+if (!defaultEnvironmentPreset) {
+  throw new Error(
+    `config: default environment preset "${DEFAULT_ENVIRONMENT_PRESET_ID}" not found among loaded presets`,
+  );
+}
+export const DEFAULT_ENVIRONMENT_PRESET: EnvironmentPreset = defaultEnvironmentPreset;
+
+/** Falls back to the default preset for an unknown id — the one place that fallback lives. */
+export function resolveEnvironmentPreset(id: string): EnvironmentPreset {
+  return ENVIRONMENT_PRESETS[id] ?? DEFAULT_ENVIRONMENT_PRESET;
+}
+
 /** Scene-wide tuning tokens (palette mirrored in `style.css`). */
 export const SCENE = {
   /** Exponential-squared fog: the sense of depth (SPEC §6.3). */
@@ -543,7 +590,7 @@ export const SCENE = {
     bobSpeed: 0.16,
   },
   bubbles: { count: 900, riseSpeed: 0.55, size: 0.1 },
-  godRays: { count: 7, opacity: 0.06 },
+  godRays: { count: 7 },
   coral: { clusters: 22, avoidanceRadius: 2.0, avoidanceHeight: 1.2 },
   /** Adaptive quality thresholds (SPEC N2 / §6.2). */
   quality: {

@@ -35,10 +35,12 @@ import {
 
 import {
   BACKGROUND_DETAIL_PROFILES,
+  DEFAULT_ENVIRONMENT_PRESET,
   SCENE,
   SEAWEED_COUNT,
   type CoralDetailProfile,
   type DetailLevel,
+  type EnvironmentPreset,
 } from "./config";
 
 /** Shared animation clock handed to every generated shader. */
@@ -119,6 +121,7 @@ export function applyCaustics(
   material: MeshLambertMaterial,
   time: TimeUniform,
   enabled: ToggleUniform,
+  tint: Color = new Color(DEFAULT_ENVIRONMENT_PRESET.caustics.tint),
 ): void {
   material.onBeforeCompile = (shader) => {
     shader.uniforms["uTime"] = time;
@@ -147,7 +150,7 @@ float wave = sin( cp.x + ct ) * sin( cp.y * 1.27 - ct * 0.8 )
   + sin( ( cp.x + cp.y ) * 0.71 + ct * 1.15 );
 float caustic = pow( max( wave * 0.5 + 0.5, 0.0 ), 3.0 );
 float depthFade = smoothstep( ${(SCENE.floorY - 1).toFixed(2)}, ${(SCENE.floorY + 6).toFixed(2)}, vCausticPos.y );
-diffuseColor.rgb += vec3( 0.16, 0.33, 0.36 ) * caustic * mix( 1.0, 0.35, depthFade ) * uCausticsEnabled;`,
+diffuseColor.rgb += vec3( ${tint.r.toFixed(3)}, ${tint.g.toFixed(3)}, ${tint.b.toFixed(3)} ) * caustic * mix( 1.0, 0.35, depthFade ) * uCausticsEnabled;`,
       );
   };
 }
@@ -157,6 +160,7 @@ export function createFloor(
   time: TimeUniform,
   segments: number = BACKGROUND_DETAIL_PROFILES.medium.floorSegments,
   causticsEnabled: ToggleUniform = { value: 1 },
+  preset: EnvironmentPreset = DEFAULT_ENVIRONMENT_PRESET,
 ): Mesh {
   const geometry = new PlaneGeometry(72, 72, segments, segments);
   geometry.rotateX(-Math.PI / 2);
@@ -164,8 +168,8 @@ export function createFloor(
 
   const position = geometry.getAttribute("position");
   const colors = new Float32Array(position.count * 3);
-  const deep = new Color("#123b4b");
-  const sand = new Color("#4c6b73");
+  const deep = new Color(preset.floor.deep);
+  const sand = new Color(preset.floor.sand);
   const tint = new Color();
 
   for (let i = 0; i < position.count; i += 1) {
@@ -184,15 +188,13 @@ export function createFloor(
   geometry.computeVertexNormals();
 
   const material = new MeshLambertMaterial({ vertexColors: true, flatShading: true });
-  applyCaustics(material, time, causticsEnabled);
+  applyCaustics(material, time, causticsEnabled, new Color(preset.caustics.tint));
 
   const mesh = new Mesh(geometry, material);
   mesh.position.y = SCENE.floorY;
   mesh.name = "floor";
   return mesh;
 }
-
-const CORAL_COLORS = ["#e2705f", "#c9558c", "#e79b3f", "#5fb7a5", "#8d6bc4"] as const;
 
 /** Deterministic cluster center placement, shared between coral rendering and fish territory/avoidance. */
 export function computeCoralClusterCenters(rng: () => number, clusterCount: number): Vector3[] {
@@ -216,6 +218,7 @@ export function createCoral(
   profile: CoralDetailProfile = BACKGROUND_DETAIL_PROFILES.medium.coral,
   clusterCount: number = SCENE.coral.clusters,
   causticsEnabled: ToggleUniform = { value: 1 },
+  preset: EnvironmentPreset = DEFAULT_ENVIRONMENT_PRESET,
 ): { mesh: Mesh; clusterCenters: readonly Vector3[] } {
   const parts: BufferGeometry[] = [];
   const matrix = new Matrix4();
@@ -235,7 +238,8 @@ export function createCoral(
     const center = clusterCenters[c] as Vector3;
     const baseX = center.x;
     const baseZ = center.z;
-    const hue = CORAL_COLORS[Math.floor(rng() * CORAL_COLORS.length)] ?? CORAL_COLORS[0];
+    const hue = (preset.coral.colors[Math.floor(rng() * preset.coral.colors.length)] ??
+      preset.coral.colors[0]) as string;
     const color = new Color(hue).multiplyScalar(0.55 + rng() * 0.3);
     const pieces = 2 + Math.floor(rng() * 3);
 
@@ -283,7 +287,7 @@ export function createCoral(
   }
 
   const material = new MeshLambertMaterial({ vertexColors: true, flatShading: true });
-  applyCaustics(material, time, causticsEnabled);
+  applyCaustics(material, time, causticsEnabled, new Color(preset.caustics.tint));
 
   const mesh = new Mesh(mergeBaked(parts), material);
   mesh.name = "coral";
@@ -300,6 +304,7 @@ export function createSeaweed(
   time: TimeUniform,
   heightSegments: number = BACKGROUND_DETAIL_PROFILES.medium.seaweedHeightSegments,
   count: number = SEAWEED_COUNT,
+  preset: EnvironmentPreset = DEFAULT_ENVIRONMENT_PRESET,
 ): InstancedMesh {
   const bladeHeight = 2.6;
   const geometry = new PlaneGeometry(0.28, bladeHeight, 1, heightSegments);
@@ -308,8 +313,8 @@ export function createSeaweed(
 
   const position = geometry.getAttribute("position");
   const colors = new Float32Array(position.count * 3);
-  const root = new Color("#1d5c4a");
-  const tip = new Color("#5fd3a3");
+  const root = new Color(preset.seaweed.root);
+  const tip = new Color(preset.seaweed.tip);
   const tint = new Color();
   for (let i = 0; i < position.count; i += 1) {
     tint.copy(root).lerp(tip, Math.min(1, position.getY(i) / bladeHeight));
@@ -370,14 +375,14 @@ transformed.z += cos( uTime * 0.7 + aPhase * 1.3 ) * swayWeight * 0.32;`,
 }
 
 /** A few additive planes standing in for sunlight shafts (SPEC §6.3). */
-function createGodRays(rng: () => number): Mesh {
+function createGodRays(rng: () => number, preset: EnvironmentPreset = DEFAULT_ENVIRONMENT_PRESET): Mesh {
   const parts: BufferGeometry[] = [];
   const matrix = new Matrix4();
   const quaternion = new Quaternion();
   const euler = new Euler();
   const scale = new Vector3(1, 1, 1);
   const position = new Vector3();
-  const tint = new Color("#bfeaff");
+  const tint = new Color(preset.godRays.tint);
 
   for (let i = 0; i < SCENE.godRays.count; i += 1) {
     const angle = (i / SCENE.godRays.count) * Math.PI * 2 + rng() * 0.6;
@@ -405,7 +410,7 @@ function createGodRays(rng: () => number): Mesh {
   const material = new MeshBasicMaterial({
     vertexColors: true,
     transparent: true,
-    opacity: SCENE.godRays.opacity,
+    opacity: preset.godRays.opacity,
     blending: AdditiveBlending,
     depthWrite: false,
     side: DoubleSide,
@@ -422,10 +427,12 @@ export interface Environment {
   readonly group: Group;
   readonly coralClusterCenters: readonly Vector3[];
   update(elapsed: number): void;
-  /** Rebuild floor/coral/seaweed at a new detail level and/or object count (SPEC §6.5.3). */
-  rebuild(detail: DetailLevel, objectCountScale: number): void;
+  /** Rebuild floor/coral/seaweed/godRays at a new detail level, object count, and/or preset (SPEC §6.5.3). */
+  rebuild(detail: DetailLevel, objectCountScale: number, preset?: EnvironmentPreset): void;
   /** Live light-intensity multiplier and caustics on/off (SPEC §6.5.3, instant). */
   setLighting(intensityScale: number, caustics: boolean): void;
+  /** Immediately updates fog/background/light colors from a new preset — no geometry rebuild. */
+  setPreset(preset: EnvironmentPreset): void;
   dispose(): void;
 }
 
@@ -435,6 +442,7 @@ export interface CreateEnvironmentOptions {
   readonly objectCountScale?: number;
   readonly lightingIntensityScale?: number;
   readonly caustics?: boolean;
+  readonly preset?: EnvironmentPreset;
 }
 
 const BASE_HEMISPHERE_INTENSITY = 1.15;
@@ -457,7 +465,10 @@ export function createEnvironment(
   rng: () => number,
   options: CreateEnvironmentOptions = {},
 ): Environment {
-  scene.fog = new FogExp2(SCENE.fog.color, SCENE.fog.density);
+  const preset = options.preset ?? DEFAULT_ENVIRONMENT_PRESET;
+  const fog = new FogExp2(preset.water.fogColor, preset.water.fogDensity);
+  scene.fog = fog;
+  scene.background = new Color(preset.water.backgroundColor);
 
   const time: TimeUniform = { value: 0 };
   const causticsEnabled: ToggleUniform = { value: options.caustics === false ? 0 : 1 };
@@ -465,10 +476,14 @@ export function createEnvironment(
   group.name = "environment";
 
   const intensityScale = options.lightingIntensityScale ?? 1;
-  const hemisphere = new HemisphereLight(0xbfeaff, 0x0b2b3c, BASE_HEMISPHERE_INTENSITY * intensityScale);
-  const sun = new DirectionalLight(0xd8f4ff, BASE_SUN_INTENSITY * intensityScale);
+  const hemisphere = new HemisphereLight(
+    preset.lighting.hemisphereSky,
+    preset.lighting.hemisphereGround,
+    BASE_HEMISPHERE_INTENSITY * intensityScale,
+  );
+  const sun = new DirectionalLight(preset.lighting.sun, BASE_SUN_INTENSITY * intensityScale);
   sun.position.set(4, 18, 6);
-  const rim = new DirectionalLight(0x2f7fd1, BASE_RIM_INTENSITY * intensityScale);
+  const rim = new DirectionalLight(preset.lighting.rim, BASE_RIM_INTENSITY * intensityScale);
   rim.position.set(-8, 4, -10);
 
   const detail = options.detail ?? "medium";
@@ -476,10 +491,17 @@ export function createEnvironment(
   const profile = BACKGROUND_DETAIL_PROFILES[detail];
   const { coralClusters, seaweedCount } = computeObjectCounts(objectCountScale);
 
-  let floor = createFloor(time, profile.floorSegments, causticsEnabled);
-  let { mesh: coral, clusterCenters } = createCoral(rng, time, profile.coral, coralClusters, causticsEnabled);
-  let seaweed = createSeaweed(rng, time, profile.seaweedHeightSegments, seaweedCount);
-  const godRays = createGodRays(rng);
+  let floor = createFloor(time, profile.floorSegments, causticsEnabled, preset);
+  let { mesh: coral, clusterCenters } = createCoral(
+    rng,
+    time,
+    profile.coral,
+    coralClusters,
+    causticsEnabled,
+    preset,
+  );
+  let seaweed = createSeaweed(rng, time, profile.seaweedHeightSegments, seaweedCount, preset);
+  let godRays = createGodRays(rng, preset);
 
   group.add(floor, coral, seaweed);
   group.add(hemisphere, sun, rim, godRays);
@@ -494,29 +516,58 @@ export function createEnvironment(
       godRays.rotation.y = elapsed * 0.012;
       godRays.position.x = Math.sin(elapsed * 0.05) * 0.6;
     },
-    rebuild(nextDetail: DetailLevel, nextObjectCountScale: number): void {
+    rebuild(
+      nextDetail: DetailLevel,
+      nextObjectCountScale: number,
+      nextPreset: EnvironmentPreset = DEFAULT_ENVIRONMENT_PRESET,
+    ): void {
       const nextProfile = BACKGROUND_DETAIL_PROFILES[nextDetail];
       const counts = computeObjectCounts(nextObjectCountScale);
 
-      const nextFloor = createFloor(time, nextProfile.floorSegments, causticsEnabled);
-      const nextCoralResult = createCoral(rng, time, nextProfile.coral, counts.coralClusters, causticsEnabled);
-      const nextSeaweed = createSeaweed(rng, time, nextProfile.seaweedHeightSegments, counts.seaweedCount);
+      const nextFloor = createFloor(time, nextProfile.floorSegments, causticsEnabled, nextPreset);
+      const nextCoralResult = createCoral(
+        rng,
+        time,
+        nextProfile.coral,
+        counts.coralClusters,
+        causticsEnabled,
+        nextPreset,
+      );
+      const nextSeaweed = createSeaweed(
+        rng,
+        time,
+        nextProfile.seaweedHeightSegments,
+        counts.seaweedCount,
+        nextPreset,
+      );
+      const nextGodRays = createGodRays(rng, nextPreset);
 
-      group.add(nextFloor, nextCoralResult.mesh, nextSeaweed);
+      group.add(nextFloor, nextCoralResult.mesh, nextSeaweed, nextGodRays);
       disposeMesh(floor);
       disposeMesh(coral);
       disposeMesh(seaweed);
+      disposeMesh(godRays);
 
       floor = nextFloor;
       coral = nextCoralResult.mesh;
       clusterCenters = nextCoralResult.clusterCenters;
       seaweed = nextSeaweed;
+      godRays = nextGodRays;
     },
     setLighting(nextIntensityScale: number, caustics: boolean): void {
       hemisphere.intensity = BASE_HEMISPHERE_INTENSITY * nextIntensityScale;
       sun.intensity = BASE_SUN_INTENSITY * nextIntensityScale;
       rim.intensity = BASE_RIM_INTENSITY * nextIntensityScale;
       causticsEnabled.value = caustics ? 1 : 0;
+    },
+    setPreset(nextPreset: EnvironmentPreset): void {
+      fog.color.set(nextPreset.water.fogColor);
+      fog.density = nextPreset.water.fogDensity;
+      scene.background = new Color(nextPreset.water.backgroundColor);
+      hemisphere.color.set(nextPreset.lighting.hemisphereSky);
+      hemisphere.groundColor.set(nextPreset.lighting.hemisphereGround);
+      sun.color.set(nextPreset.lighting.sun);
+      rim.color.set(nextPreset.lighting.rim);
     },
     dispose(): void {
       for (const mesh of [floor, coral, seaweed, godRays]) disposeMesh(mesh);

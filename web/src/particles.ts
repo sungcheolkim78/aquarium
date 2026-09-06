@@ -20,7 +20,7 @@ import {
   type Texture,
 } from "three";
 
-import { SCENE } from "./config";
+import { DEFAULT_ENVIRONMENT_PRESET, SCENE } from "./config";
 
 /** Radial white-to-transparent sprite, drawn once into an offscreen canvas. */
 function createBubbleSprite(size = 64): Texture {
@@ -53,6 +53,8 @@ export interface BubbleField {
   setDensityScale(scale: number): void;
   /** Show or hide the whole bubble field (SPEC §6.5.3). */
   setEnabled(enabled: boolean): void;
+  /** Recolors every particle from its stored per-particle brightness against a new base tint. No rebuild. */
+  setTint(tint: Color): void;
   dispose(): void;
 }
 
@@ -60,9 +62,11 @@ export interface BubbleField {
 export function createBubbles(
   rng: () => number,
   count: number = SCENE.bubbles.count,
+  tint: Color = new Color(DEFAULT_ENVIRONMENT_PRESET.bubbles.tint),
 ): BubbleField {
   const positions = new Float32Array(count * 3);
   const colors = new Float32Array(count * 3);
+  const brightness = new Float32Array(count);
   const columnX = new Float32Array(count);
   const columnZ = new Float32Array(count);
   const speeds = new Float32Array(count);
@@ -71,7 +75,7 @@ export function createBubbles(
 
   const bottom = SCENE.floorY + 0.15;
   const span = SCENE.bounds.y * 2 + 2.5;
-  const tint = new Color();
+  const working = new Color();
 
   for (let i = 0; i < count; i += 1) {
     const angle = rng() * Math.PI * 2;
@@ -86,17 +90,20 @@ export function createBubbles(
     positions[i * 3 + 1] = bottom + rng() * span;
     positions[i * 3 + 2] = columnZ[i] ?? 0;
 
-    tint.setRGB(0.72, 0.9, 1).multiplyScalar(0.45 + rng() * 0.55);
-    colors[i * 3] = tint.r;
-    colors[i * 3 + 1] = tint.g;
-    colors[i * 3 + 2] = tint.b;
+    const b = 0.45 + rng() * 0.55;
+    brightness[i] = b;
+    working.copy(tint).multiplyScalar(b);
+    colors[i * 3] = working.r;
+    colors[i * 3 + 1] = working.g;
+    colors[i * 3 + 2] = working.b;
   }
 
   const geometry = new BufferGeometry();
   const positionAttribute = new BufferAttribute(positions, 3);
   positionAttribute.setUsage(DynamicDrawUsage);
   geometry.setAttribute("position", positionAttribute);
-  geometry.setAttribute("color", new BufferAttribute(colors, 3));
+  const colorAttribute = new BufferAttribute(colors, 3);
+  geometry.setAttribute("color", colorAttribute);
   geometry.setDrawRange(0, count);
   geometry.boundingSphere = null;
 
@@ -142,6 +149,16 @@ export function createBubbles(
     },
     setEnabled(enabled: boolean): void {
       points.visible = enabled;
+    },
+    setTint(nextTint: Color): void {
+      const nextWorking = new Color();
+      for (let i = 0; i < count; i += 1) {
+        nextWorking.copy(nextTint).multiplyScalar(brightness[i] ?? 1);
+        colors[i * 3] = nextWorking.r;
+        colors[i * 3 + 1] = nextWorking.g;
+        colors[i * 3 + 2] = nextWorking.b;
+      }
+      colorAttribute.needsUpdate = true;
     },
     dispose(): void {
       points.removeFromParent();

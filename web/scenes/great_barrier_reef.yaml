@@ -1,0 +1,27 @@
+id: great_barrier_reef
+label: 그레이트 배리어 리프
+description: "밝고 맑은 청록빛 산호초 바다. 강한 햇살과 따뜻한 산호색이 특징이에요."
+water:
+  fogColor: "#1c6f95"
+  fogDensity: 0.032
+  backgroundColor: "#0d4a68"
+lighting:
+  hemisphereSky: "#d9f4ff"
+  hemisphereGround: "#123f52"
+  sun: "#eaf8ff"
+  rim: "#2f8fd8"
+caustics:
+  tint: "#3a7d82"
+godRays:
+  tint: "#eaf7ff"
+  opacity: 0.1
+floor:
+  deep: "#2f6b7a"
+  sand: "#e3d9b8"
+coral:
+  colors: ["#ff7a5c", "#e0609e", "#ffb347", "#4fd0b8", "#a07ee0"]
+seaweed:
+  root: "#1f6e4f"
+  tip: "#7be8a8"
+bubbles:
+  tint: "#cceeff"
