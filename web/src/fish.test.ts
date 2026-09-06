@@ -12,7 +12,6 @@ import {
   buildCreatureGeometry,
   clampTurnRate,
   computeCentroid,
-  computeFacetJitter,
   containSteer,
   coralAvoidanceSteer,
   createRng,
@@ -22,6 +21,7 @@ import {
   rhythmSpeedScale,
   type Boid,
 } from "./fish";
+import { fishBodyRadius } from "./creatures/geometry/fish";
 import { computeCoralClusterCenters } from "./environment";
 import {
   buildSharkGeometry,
@@ -115,7 +115,9 @@ describe("fish registry", () => {
       expect(species.count).toBeGreaterThan(0);
       expect(species.shape.length).toBeGreaterThan(0);
       if (species.geometry === "lowpoly-fish") {
-        expect(species.shape.stripes).toBeGreaterThanOrEqual(0);
+        expect(species.shape.pattern.stripes).toBeGreaterThanOrEqual(0);
+        expect(species.shape.body.length).toBeGreaterThan(0);
+        expect(species.shape.snout.length + species.shape.peduncle.length).toBeLessThan(1);
       } else if (species.geometry === "lowpoly-shark") {
         expect(species.shape.dorsalFinHeight).toBeGreaterThan(0);
       } else if (species.geometry === "lowpoly-seahorse") {
@@ -171,8 +173,9 @@ describe("buildFishGeometry", () => {
       expect(position.count % 3).toBe(0);
       expect(color.count).toBe(position.count);
       expect(normal.count).toBe(position.count);
-      // "low-poly" budget: a fish must stay well under 100 triangles.
-      expect(position.count / 3).toBeLessThan(100);
+      // "low-poly" budget: comfortably above the ~660-triangle `high`-detail (no-thread) real
+      // output for this profile table (docs/superpowers/specs/2026-09-06-fish-procedural-grammar-design.md §4).
+      expect(position.count / 3).toBeLessThan(750);
       for (const attribute of [position, normal, color]) {
         for (const value of attribute.array) expect(Number.isFinite(value)).toBe(true);
       }
@@ -180,7 +183,7 @@ describe("buildFishGeometry", () => {
     }
   });
 
-  it("defaults to medium detail, matching the exact v1 baseline (AC-1)", () => {
+  it("defaults to medium detail", () => {
     const species = FISH_REGISTRY[0] as Extract<FishSpecies, { geometry: "lowpoly-fish" }>;
     const withoutDetail = buildFishGeometry(species.shape, species.palette);
     const withMedium = buildFishGeometry(species.shape, species.palette, "medium");
@@ -223,7 +226,7 @@ describe("buildFishGeometry", () => {
 
   it("paints accent stripes only for striped species", () => {
     const clownfish = FISH_REGISTRY[0] as Extract<FishSpecies, { geometry: "lowpoly-fish" }>;
-    expect(clownfish.shape.stripes).toBeGreaterThan(0);
+    expect(clownfish.shape.pattern.stripes).toBeGreaterThan(0);
     const geometry = buildFishGeometry(clownfish.shape, {
       body: "#000000",
       fin: "#000000",
@@ -238,7 +241,7 @@ describe("buildFishGeometry", () => {
     geometry.dispose();
   });
 
-  it("stays a vertex-for-vertex regression of v1 at medium detail (no facet jitter, AC-9)", () => {
+  it("is deterministic: same species and detail produce identical output", () => {
     for (const species of FISH_REGISTRY) {
       if (species.geometry !== "lowpoly-fish") continue;
       const a = buildFishGeometry(species.shape, species.palette, "medium");
@@ -252,69 +255,74 @@ describe("buildFishGeometry", () => {
   });
 });
 
-describe("computeFacetJitter (SPEC §6.2.1, AC-9)", () => {
-  it("is the identity (no angle offset, radius scale 1) at facetJitter 0", () => {
-    for (let ring = 0; ring < 5; ring += 1) {
-      for (let dir = 0; dir < 6; dir += 1) {
-        const jitter = computeFacetJitter(ring, dir, 6, 42, 0);
-        expect(jitter.angleOffset).toBe(0);
-        expect(jitter.radialScale).toBe(1);
+describe("fishBodyRadius", () => {
+  const baseShape = {
+    length: 1,
+    snout: { length: 0.15, taper: 0.8 },
+    body: { length: 1, maxHeight: 0.4, maxWidth: 0.2, peak: 0.4, taper: 1.1 },
+    peduncle: { length: 0.15, taper: 1.6 },
+    tailFin: { height: 0.2, length: 0.2, notch: 0.3 },
+    dorsalFin: { start: 0.2, end: 0.7, height: 0.15 },
+    pelvicFin: { length: 0.1, angle: 40 },
+    pectoralFin: { length: 0.12, angle: 30 },
+    pattern: { stripes: 0 },
+  };
+
+  it("returns the default snout tip radius at t=0 and default peduncle width at t=1", () => {
+    expect(fishBodyRadius(0, baseShape)).toBeCloseTo(0.08, 5);
+    expect(fishBodyRadius(1, baseShape)).toBeCloseTo(0.12, 5);
+  });
+
+  it("returns the default shoulder radius exactly at the snout/main-body and main-body/peduncle boundaries", () => {
+    const s = baseShape.snout.length;
+    const p = baseShape.peduncle.length;
+    expect(fishBodyRadius(s, baseShape)).toBeCloseTo(0.82, 5);
+    expect(fishBodyRadius(1 - p, baseShape)).toBeCloseTo(0.82, 5);
+  });
+
+  it("reaches radius 1 exactly at body.peak (mapped into the main-body zone)", () => {
+    const s = baseShape.snout.length;
+    const p = baseShape.peduncle.length;
+    const tAtPeak = s + baseShape.body.peak * (1 - s - p);
+    expect(fishBodyRadius(tAtPeak, baseShape)).toBeCloseTo(1, 5);
+  });
+
+  it("is continuous: values just inside and just outside each zone boundary are nearly equal", () => {
+    const s = baseShape.snout.length;
+    const p = baseShape.peduncle.length;
+    expect(fishBodyRadius(s - 1e-6, baseShape)).toBeCloseTo(fishBodyRadius(s + 1e-6, baseShape), 4);
+    expect(fishBodyRadius(1 - p - 1e-6, baseShape)).toBeCloseTo(fishBodyRadius(1 - p + 1e-6, baseShape), 4);
+  });
+
+  it("a higher body.peak shifts the max-radius point later along the body", () => {
+    const forward = { ...baseShape, body: { ...baseShape.body, peak: 0.25 } };
+    const aft = { ...baseShape, body: { ...baseShape.body, peak: 0.75 } };
+    const argmax = (shape: typeof baseShape): number => {
+      let bestT = 0;
+      let bestR = -Infinity;
+      for (let i = 0; i <= 200; i += 1) {
+        const t = i / 200;
+        const r = fishBodyRadius(t, shape);
+        if (r > bestR) {
+          bestR = r;
+          bestT = t;
+        }
       }
-    }
+      return bestT;
+    };
+    expect(argmax(aft)).toBeGreaterThan(argmax(forward));
   });
 
-  it("is deterministic: same inputs always produce the same output", () => {
-    const a = computeFacetJitter(3, 2, 6, 1234, 0.16);
-    const b = computeFacetJitter(3, 2, 6, 1234, 0.16);
-    expect(a).toEqual(b);
-  });
-
-  it("keeps the radius scale bounded to [1-facetJitter, 1+facetJitter]", () => {
-    const amount = 0.16;
-    for (let ring = 0; ring < 12; ring += 1) {
-      for (let dir = 0; dir < 8; dir += 1) {
-        const { radialScale } = computeFacetJitter(ring, dir, 8, 99, amount);
-        expect(radialScale).toBeGreaterThanOrEqual(1 - amount);
-        expect(radialScale).toBeLessThanOrEqual(1 + amount);
-      }
-    }
-  });
-
-  it("is not degenerate: varies across ring/dir indices when facetJitter > 0", () => {
-    const values = new Set<number>();
-    for (let ring = 0; ring < 10; ring += 1) {
-      for (let dir = 0; dir < 6; dir += 1) {
-        values.add(computeFacetJitter(ring, dir, 6, 7, 0.16).radialScale);
-      }
-    }
-    expect(values.size).toBeGreaterThan(1);
-  });
-
-  it("differs by seed, so two species with the same shape don't jitter identically", () => {
-    const a = computeFacetJitter(2, 1, 6, 11, 0.16);
-    const b = computeFacetJitter(2, 1, 6, 22, 0.16);
-    expect(a).not.toEqual(b);
-  });
-});
-
-describe("buildFishGeometry high detail facet jitter (AC-9)", () => {
-  it("keeps every vertex finite and within a bounded distance of the body axis", () => {
-    for (const species of FISH_REGISTRY) {
-      if (species.geometry !== "lowpoly-fish") continue;
-      const geometry = buildFishGeometry(species.shape, species.palette, "high");
-      const position = geometry.getAttribute("position");
-      const maxRadius = Math.max(species.shape.height, species.shape.width) * 0.75;
-      for (let i = 0; i < position.count; i += 1) {
-        const y = position.getY(i);
-        const z = position.getZ(i);
-        expect(Number.isFinite(y)).toBe(true);
-        expect(Number.isFinite(z)).toBe(true);
-        // Fin tips legitimately extend further than the body ring radius;
-        // only assert the *body* is not blown out by jitter (loose bound).
-        expect(Math.hypot(y, z)).toBeLessThan(species.shape.length + maxRadius + 1);
-      }
-      geometry.dispose();
-    }
+  it("respects explicit tipRadius/shoulderRadius/width overrides", () => {
+    const custom = {
+      ...baseShape,
+      snout: { ...baseShape.snout, tipRadius: 0.2 },
+      body: { ...baseShape.body, shoulderRadius: 0.9 },
+      peduncle: { ...baseShape.peduncle, width: 0.3 },
+    };
+    expect(fishBodyRadius(0, custom)).toBeCloseTo(0.2, 5);
+    expect(fishBodyRadius(1, custom)).toBeCloseTo(0.3, 5);
+    expect(fishBodyRadius(custom.snout.length, custom)).toBeCloseTo(0.9, 5);
   });
 });
 

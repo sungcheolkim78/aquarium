@@ -33,7 +33,7 @@ import { buildSharkGeometry } from "./creatures/geometry/shark";
 import { buildSeahorseGeometry } from "./creatures/geometry/seahorse";
 import { buildTurtleGeometry } from "./creatures/geometry/turtle";
 
-export { buildFishGeometry, computeFacetJitter } from "./creatures/geometry/fish";
+export { buildFishGeometry } from "./creatures/geometry/fish";
 
 /** Fish geometry is modelled nose-first along +X. */
 export const FORWARD = new Vector3(1, 0, 0);

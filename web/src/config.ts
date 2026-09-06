@@ -20,29 +20,19 @@ export type DetailLevel = "low" | "medium" | "high";
 
 /** Body cross-section/length subdivision counts per detail tier for fish geometry. */
 export interface FishDetailProfile {
-  /** Number of rings walked along the body length. */
+  /** Segment count for the main-body zone; snout/peduncle zones derive their own count as `max(2, round(bodySegments * 0.4))`. */
   readonly bodySegments: number;
   /** Number of vertices around each ring's cross-section. */
   readonly ringSides: number;
-  /**
-   * 0 = perfectly regular ring (v1 shape). >0 nudges each ring vertex's angle
-   * and radius by a deterministic per-vertex amount, breaking the smooth
-   * revolve into the irregular, hand-triangulated facets seen in the
-   * `resources/images` reference art (SPEC §6.2.1). Must be 0 at `medium` —
-   * it is the exact v1 baseline (AC-1).
-   */
-  readonly facetJitter: number;
+  /** Shared wedge/strip count for the tail fin, dorsal fin, pectoral fin, and (if present) the thread. */
+  readonly finSegments: number;
 }
 
-/**
- * `medium` reproduces the exact v1 baseline (~50 triangles/fish). `high` targets
- * +150% (~2.5x) triangles per SPEC §6.2/AC-2, plus facet jitter (§6.2.1); `low`
- * trims segment count down for weak devices.
- */
+/** `high` deliberately targets ~11x today's baseline triangle count — the scene-wide triangle budget (SPEC N1) has large headroom. No facet jitter at any tier: real segment counts now carry high-detail richness. */
 export const FISH_DETAIL_PROFILES: Record<DetailLevel, FishDetailProfile> = {
-  low: { bodySegments: 3, ringSides: 4, facetJitter: 0 },
-  medium: { bodySegments: 5, ringSides: 4, facetJitter: 0 },
-  high: { bodySegments: 10, ringSides: 6, facetJitter: 0.16 },
+  low: { bodySegments: 4, ringSides: 5, finSegments: 3 },
+  medium: { bodySegments: 8, ringSides: 7, finSegments: 4 },
+  high: { bodySegments: 16, ringSides: 10, finSegments: 7 },
 };
 
 /** Segment/subdivision counts for one procedural coral primitive kind. */
@@ -111,18 +101,96 @@ export const BACKGROUND_DETAIL_PROFILES: Record<DetailLevel, BackgroundDetailPro
 /** Base seaweed blade instance count at `objectCountScale: 1` (SPEC §6.5.4). */
 export const SEAWEED_COUNT = 64;
 
-/** Per-species silhouette parameters fed to the procedural geometry builder. */
-export interface FishShape {
-  /** Nose-to-tail length in world units. */
+export interface FishSnoutShape {
+  /** Fraction (0..1) of `body.length` occupied by the snout zone. */
   readonly length: number;
-  /** Dorsal-to-ventral height in world units. */
+  /** Exponent controlling how fast the snout widens from its tip toward the main body. */
+  readonly taper: number;
+  /** Radius fraction at the very tip of the nose. Defaults to 0.08. */
+  readonly tipRadius?: number;
+}
+
+export interface FishBodyShape {
+  /** Nose-to-tail-fin-root length in world units. */
+  readonly length: number;
+  readonly maxHeight: number;
+  readonly maxWidth: number;
+  /** Fraction (0..1, exclusive), position of the widest point within the main-body zone. */
+  readonly peak: number;
+  /** Exponent controlling how sharply the main-body zone bulges toward `peak`. */
+  readonly taper: number;
+  /** Radius fraction at the main-body zone's own start/end (where it meets the snout/peduncle zones). Defaults to 0.82. */
+  readonly shoulderRadius?: number;
+}
+
+export interface FishPeduncleShape {
+  /** Fraction (0..1) of `body.length` occupied by the peduncle zone. */
+  readonly length: number;
+  /** Exponent controlling how fast the peduncle narrows toward the tail fin. */
+  readonly taper: number;
+  /** Radius fraction at the tail-fin root. Defaults to 0.12. */
+  readonly width?: number;
+}
+
+export interface FishTailFinShape {
   readonly height: number;
-  /** Lateral thickness in world units. */
-  readonly width: number;
-  /** Caudal fin span in world units. */
-  readonly tailSpan: number;
-  /** Number of accent bands painted across the body (0 = none). */
+  readonly length: number;
+  /** 0..1 (exclusive): how far the trailing-edge notch is pulled toward the root. */
+  readonly notch: number;
+}
+
+export interface FishDorsalFinShape {
+  /** t-fraction (0..1) along body.length where the fin base starts. */
+  readonly start: number;
+  /** t-fraction (0..1) along body.length where the fin base ends; must be greater than `start`. */
+  readonly end: number;
+  readonly height: number;
+}
+
+export interface FishPelvicFinShape {
+  readonly length: number;
+  /** Degrees swept back from vertical. */
+  readonly angle: number;
+  /** t-fraction along body.length where the fin root sits. Defaults to 0.55. */
+  readonly at?: number;
+}
+
+export interface FishPectoralFinShape {
+  readonly length: number;
+  /** Degrees swept back from horizontal. */
+  readonly angle: number;
+  /** t-fraction along body.length where the fin root sits. Defaults to 0.28. */
+  readonly at?: number;
+}
+
+export interface FishThreadShape {
+  readonly length: number;
+  readonly curvature: number;
+}
+
+export interface FishEyeShape {
+  /** World-scale radius. 0 omits the eye entirely. Defaults to `0.16 * body.maxHeight` when the whole `eye` group is absent. */
+  readonly radius?: number;
+}
+
+export interface FishPatternShape {
   readonly stripes: number;
+}
+
+/** Per-species silhouette parameters for the `lowpoly-fish` grammar (docs/superpowers/specs/2026-09-06-fish-procedural-grammar-design.md). */
+export interface FishShape {
+  /** Always equal to `body.length` — required because `fish.ts`'s sway shader reads `species.shape.length` generically across every creature kind. Never authored separately. */
+  readonly length: number;
+  readonly snout: FishSnoutShape;
+  readonly body: FishBodyShape;
+  readonly peduncle: FishPeduncleShape;
+  readonly tailFin: FishTailFinShape;
+  readonly dorsalFin: FishDorsalFinShape;
+  readonly pelvicFin: FishPelvicFinShape;
+  readonly pectoralFin: FishPectoralFinShape;
+  readonly pattern: FishPatternShape;
+  readonly thread?: FishThreadShape;
+  readonly eye?: FishEyeShape;
 }
 
 /** Silhouette parameters for a shark's distinct body plan. */
@@ -196,6 +264,8 @@ interface CreatureDefinition {
     readonly body: string;
     readonly fin: string;
     readonly accent: string;
+    /** Eye color; defaults to a fixed dark constant (see `creatures/geometry/fish.ts`) when omitted. */
+    readonly eye?: string;
   };
   readonly behavior: {
     /** Base swim speed in world units per second. */
@@ -254,7 +324,18 @@ export const FISH_REGISTRY: readonly FishSpecies[] = [
       rhythmAmplitude: 0.15,
       rhythmFrequency: 0.5,
     },
-    shape: { length: 0.62, height: 0.34, width: 0.16, tailSpan: 0.3, stripes: 3 },
+    shape: {
+      length: 0.62,
+      snout: { length: 0.16, taper: 0.8, tipRadius: 0.09 },
+      body: { length: 0.62, maxHeight: 0.34, maxWidth: 0.16, peak: 0.42, taper: 1.1, shoulderRadius: 0.82 },
+      peduncle: { length: 0.16, taper: 1.6, width: 0.13 },
+      tailFin: { height: 0.27, length: 0.27, notch: 0.3 },
+      dorsalFin: { start: 0.28, end: 0.74, height: 0.14 },
+      pelvicFin: { length: 0.1, angle: 45, at: 0.56 },
+      pectoralFin: { length: 0.13, angle: 30, at: 0.26 },
+      eye: { radius: 0.06 },
+      pattern: { stripes: 3 },
+    },
     count: 20,
   },
   {
@@ -273,7 +354,18 @@ export const FISH_REGISTRY: readonly FishSpecies[] = [
       rhythmAmplitude: 0.15,
       rhythmFrequency: 0.5,
     },
-    shape: { length: 0.86, height: 0.46, width: 0.2, tailSpan: 0.4, stripes: 0 },
+    shape: {
+      length: 0.86,
+      snout: { length: 0.14, taper: 0.9, tipRadius: 0.08 },
+      body: { length: 0.86, maxHeight: 0.46, maxWidth: 0.2, peak: 0.4, taper: 1.0, shoulderRadius: 0.85 },
+      peduncle: { length: 0.15, taper: 1.7, width: 0.12 },
+      tailFin: { height: 0.36, length: 0.36, notch: 0.4 },
+      dorsalFin: { start: 0.3, end: 0.8, height: 0.16 },
+      pelvicFin: { length: 0.13, angle: 42, at: 0.55 },
+      pectoralFin: { length: 0.16, angle: 28, at: 0.25 },
+      eye: { radius: 0.055 },
+      pattern: { stripes: 0 },
+    },
     count: 12,
   },
   {
@@ -293,7 +385,18 @@ export const FISH_REGISTRY: readonly FishSpecies[] = [
       rhythmFrequency: 0.35,
       territoryStrength: 0.35,
     },
-    shape: { length: 0.5, height: 0.44, width: 0.13, tailSpan: 0.26, stripes: 0 },
+    shape: {
+      length: 0.5,
+      snout: { length: 0.13, taper: 0.75, tipRadius: 0.07 },
+      body: { length: 0.5, maxHeight: 0.44, maxWidth: 0.13, peak: 0.46, taper: 1.3, shoulderRadius: 0.8 },
+      peduncle: { length: 0.15, taper: 1.8, width: 0.11 },
+      tailFin: { height: 0.23, length: 0.24, notch: 0.25 },
+      dorsalFin: { start: 0.24, end: 0.82, height: 0.2 },
+      pelvicFin: { length: 0.1, angle: 48, at: 0.58 },
+      pectoralFin: { length: 0.12, angle: 32, at: 0.26 },
+      eye: { radius: 0.06 },
+      pattern: { stripes: 0 },
+    },
     count: 8,
   },
   {
@@ -314,7 +417,18 @@ export const FISH_REGISTRY: readonly FishSpecies[] = [
       rhythmFrequency: 0.35,
       territoryStrength: 0.4,
     },
-    shape: { length: 0.46, height: 0.6, width: 0.12, tailSpan: 0.24, stripes: 1 },
+    shape: {
+      length: 0.46,
+      snout: { length: 0.12, taper: 0.6, tipRadius: 0.06 },
+      body: { length: 0.46, maxHeight: 0.6, maxWidth: 0.12, peak: 0.48, taper: 1.4, shoulderRadius: 0.78 },
+      peduncle: { length: 0.14, taper: 1.9, width: 0.1 },
+      tailFin: { height: 0.22, length: 0.2, notch: 0.2 },
+      dorsalFin: { start: 0.22, end: 0.86, height: 0.24 },
+      pelvicFin: { length: 0.09, angle: 50, at: 0.6 },
+      pectoralFin: { length: 0.11, angle: 34, at: 0.24 },
+      eye: { radius: 0.055 },
+      pattern: { stripes: 1 },
+    },
     count: 6,
   },
   {
@@ -335,7 +449,18 @@ export const FISH_REGISTRY: readonly FishSpecies[] = [
       rhythmFrequency: 0.35,
       territoryStrength: 0.3,
     },
-    shape: { length: 0.7, height: 0.52, width: 0.18, tailSpan: 0.34, stripes: 0 },
+    shape: {
+      length: 0.7,
+      snout: { length: 0.14, taper: 0.85, tipRadius: 0.08 },
+      body: { length: 0.7, maxHeight: 0.52, maxWidth: 0.18, peak: 0.44, taper: 1.15, shoulderRadius: 0.82 },
+      peduncle: { length: 0.15, taper: 1.7, width: 0.12 },
+      tailFin: { height: 0.3, length: 0.3, notch: 0.32 },
+      dorsalFin: { start: 0.28, end: 0.8, height: 0.19 },
+      pelvicFin: { length: 0.12, angle: 44, at: 0.56 },
+      pectoralFin: { length: 0.15, angle: 30, at: 0.26 },
+      eye: { radius: 0.058 },
+      pattern: { stripes: 0 },
+    },
     count: 3,
   },
   {
@@ -355,7 +480,18 @@ export const FISH_REGISTRY: readonly FishSpecies[] = [
       rhythmAmplitude: 0.15,
       rhythmFrequency: 0.5,
     },
-    shape: { length: 0.34, height: 0.2, width: 0.11, tailSpan: 0.18, stripes: 0 },
+    shape: {
+      length: 0.34,
+      snout: { length: 0.18, taper: 0.7, tipRadius: 0.06 },
+      body: { length: 0.34, maxHeight: 0.2, maxWidth: 0.11, peak: 0.4, taper: 1.0, shoulderRadius: 0.84 },
+      peduncle: { length: 0.17, taper: 1.5, width: 0.09 },
+      tailFin: { height: 0.16, length: 0.16, notch: 0.3 },
+      dorsalFin: { start: 0.3, end: 0.7, height: 0.1 },
+      pelvicFin: { length: 0.07, angle: 40, at: 0.55 },
+      pectoralFin: { length: 0.09, angle: 28, at: 0.26 },
+      eye: { radius: 0.04 },
+      pattern: { stripes: 0 },
+    },
     count: 5,
   },
   {
