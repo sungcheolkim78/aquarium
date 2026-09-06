@@ -234,12 +234,15 @@ diffuseColor.rgb += vec3( ${tint.r.toFixed(3)}, ${tint.g.toFixed(3)}, ${tint.b.t
   };
 }
 
+const ROCK_TINT_RADIUS = 2.5;
+
 /** `segments` is the floor's detail-level knob (SPEC §6.2): higher = smoother dunes. */
 export function createFloor(
   time: TimeUniform,
   segments: number = BACKGROUND_DETAIL_PROFILES.medium.floorSegments,
   causticsEnabled: ToggleUniform = { value: 1 },
   preset: EnvironmentPreset = DEFAULT_ENVIRONMENT_PRESET,
+  scatterPoints: readonly ScatterPoint[] = [],
 ): Mesh {
   const geometry = new PlaneGeometry(72, 72, segments, segments);
   geometry.rotateX(-Math.PI / 2);
@@ -249,16 +252,33 @@ export function createFloor(
   const colors = new Float32Array(position.count * 3);
   const deep = new Color(preset.floor.deep);
   const sand = new Color(preset.floor.sand);
+  const rock = new Color(preset.terrain.rockColor);
   const tint = new Color();
 
   for (let i = 0; i < position.count; i += 1) {
     const x = position.getX(i);
     const z = position.getZ(i);
-    const dune =
-      Math.sin(x * 0.16) * 0.55 + Math.cos(z * 0.21) * 0.45 + Math.sin((x + z) * 0.09) * 0.7;
+    const dune = terrainHeight(x, z, preset.terrain);
     position.setY(i, dune);
     const t = Math.min(1, Math.max(0, dune * 0.35 + 0.5));
     tint.copy(deep).lerp(sand, t);
+
+    let nearestDistSq = Infinity;
+    let nearestBiome: Biome | null = null;
+    for (const point of scatterPoints) {
+      const dx = x - point.position.x;
+      const dz = z - point.position.z;
+      const distSq = dx * dx + dz * dz;
+      if (distSq < nearestDistSq) {
+        nearestDistSq = distSq;
+        nearestBiome = point.biome;
+      }
+    }
+    if (nearestBiome === "cliff") {
+      const blend = Math.max(0, 1 - Math.sqrt(nearestDistSq) / ROCK_TINT_RADIUS);
+      if (blend > 0) tint.lerp(rock, blend);
+    }
+
     colors[i * 3] = tint.r;
     colors[i * 3 + 1] = tint.g;
     colors[i * 3 + 2] = tint.b;
@@ -275,30 +295,20 @@ export function createFloor(
   return mesh;
 }
 
-/** Deterministic cluster center placement, shared between coral rendering and fish territory/avoidance. */
-export function computeCoralClusterCenters(rng: () => number, clusterCount: number): Vector3[] {
-  const centers: Vector3[] = [];
-  for (let c = 0; c < clusterCount; c += 1) {
-    const angle = (c / clusterCount) * Math.PI * 2 + rng() * 0.35;
-    const radius = 4.5 + rng() * 8.5;
-    centers.push(new Vector3(Math.cos(angle) * radius, SCENE.floorY, Math.sin(angle) * radius));
-  }
-  return centers;
-}
-
 /**
- * `profile` sets each primitive's segment counts (SPEC §6.2); `clusterCount`
- * sets how many clusters are placed ("background object count", SPEC §6.5.4)
- * — the two knobs are independent.
+ * `profile` sets each primitive's segment counts (SPEC §6.2); `points` are the
+ * reef-classified, coral-assigned scatter points this cluster set should
+ * render at (see `computeScatterPoints` / the coral-vs-rock split in
+ * `createEnvironment`) — the two are independent.
  */
 export function createCoral(
   rng: () => number,
   time: TimeUniform,
   profile: CoralDetailProfile = BACKGROUND_DETAIL_PROFILES.medium.coral,
-  clusterCount: number = SCENE.coral.clusters,
+  points: readonly ScatterPoint[] = [],
   causticsEnabled: ToggleUniform = { value: 1 },
   preset: EnvironmentPreset = DEFAULT_ENVIRONMENT_PRESET,
-): { mesh: Mesh; clusterCenters: readonly Vector3[] } {
+): Mesh {
   const parts: BufferGeometry[] = [];
   const matrix = new Matrix4();
   const quaternion = new Quaternion();
@@ -312,11 +322,10 @@ export function createCoral(
     parts.push(bake(source, matrix, color));
   };
 
-  const clusterCenters = computeCoralClusterCenters(rng, clusterCount);
-  for (let c = 0; c < clusterCount; c += 1) {
-    const center = clusterCenters[c] as Vector3;
-    const baseX = center.x;
-    const baseZ = center.z;
+  for (const point of points) {
+    const baseX = point.position.x;
+    const baseY = point.position.y;
+    const baseZ = point.position.z;
     const hue = (preset.coral.colors[Math.floor(rng() * preset.coral.colors.length)] ??
       preset.coral.colors[0]) as string;
     const color = new Color(hue).multiplyScalar(0.55 + rng() * 0.3);
@@ -325,11 +334,7 @@ export function createCoral(
     for (let p = 0; p < pieces; p += 1) {
       const height = 0.7 + rng() * 1.9;
       const spread = 0.5 + rng() * 0.9;
-      position.set(
-        baseX + (rng() - 0.5) * 1.6,
-        SCENE.floorY + height * 0.5,
-        baseZ + (rng() - 0.5) * 1.6,
-      );
+      position.set(baseX + (rng() - 0.5) * 1.6, baseY + height * 0.5, baseZ + (rng() - 0.5) * 1.6);
       euler.set((rng() - 0.5) * 0.3, rng() * Math.PI * 2, (rng() - 0.5) * 0.3);
       scale.set(1, 1, 1);
 
@@ -348,7 +353,7 @@ export function createCoral(
       }
 
       if (rng() < 0.4) {
-        position.y = SCENE.floorY + 0.18;
+        position.y = baseY + 0.18;
         euler.set(0, rng() * Math.PI * 2, 0);
         scale.set(1, 1, 1);
         place(
@@ -370,7 +375,77 @@ export function createCoral(
 
   const mesh = new Mesh(mergeBaked(parts), material);
   mesh.name = "coral";
-  return { mesh, clusterCenters };
+  return mesh;
+}
+
+const CLIFF_HEIGHT_MIN = 2.4;
+const CLIFF_HEIGHT_MAX = 4.2;
+const CLIFF_TILT_MAX = (25 * Math.PI) / 180;
+
+/**
+ * Rock/cliff scatter — the "Primary Scatter: Rock" sibling to `createCoral`'s
+ * "Primary Scatter: Large Coral" (docs/superpowers/specs/2026-09-06-procedural-terrain-biomes-design.md §1).
+ * `cliff`-biome points get one tall, steeply-tilted formation; `reef`-biome
+ * points (routed here instead of to coral, see `createEnvironment`) get a
+ * boulder cluster at coral-like scale.
+ */
+export function createRocks(
+  rng: () => number,
+  time: TimeUniform,
+  profile: CoralDetailProfile = BACKGROUND_DETAIL_PROFILES.medium.coral,
+  points: readonly ScatterPoint[] = [],
+  causticsEnabled: ToggleUniform = { value: 1 },
+  preset: EnvironmentPreset = DEFAULT_ENVIRONMENT_PRESET,
+): Mesh {
+  const parts: BufferGeometry[] = [];
+  const matrix = new Matrix4();
+  const quaternion = new Quaternion();
+  const euler = new Euler();
+  const scale = new Vector3();
+  const position = new Vector3();
+  const baseColor = new Color(preset.terrain.rockColor);
+
+  const place = (source: BufferGeometry, color: Color): void => {
+    quaternion.setFromEuler(euler);
+    matrix.compose(position, quaternion, scale);
+    parts.push(bake(source, matrix, color));
+  };
+
+  for (const point of points) {
+    const color = baseColor.clone().multiplyScalar(0.75 + rng() * 0.3);
+
+    if (point.biome === "cliff") {
+      const height = CLIFF_HEIGHT_MIN + rng() * (CLIFF_HEIGHT_MAX - CLIFF_HEIGHT_MIN);
+      const width = 0.5 + rng() * 0.5;
+      position.set(point.position.x, point.position.y + height * 0.4, point.position.z);
+      euler.set((rng() - 0.5) * CLIFF_TILT_MAX, rng() * Math.PI * 2, (rng() - 0.5) * CLIFF_TILT_MAX);
+      scale.set(1, 1, 1);
+      place(
+        new CylinderGeometry(width * 0.4, width, height, profile.cylinderRadial, profile.cylinderHeight),
+        color,
+      );
+    } else {
+      const pieces = 1 + Math.floor(rng() * 2);
+      for (let p = 0; p < pieces; p += 1) {
+        const spread = 0.5 + rng() * 0.8;
+        position.set(
+          point.position.x + (rng() - 0.5) * 1.4,
+          point.position.y + spread * 0.5,
+          point.position.z + (rng() - 0.5) * 1.4,
+        );
+        euler.set(rng() * Math.PI * 2, rng() * Math.PI * 2, rng() * Math.PI * 2);
+        scale.set(spread, spread * (0.6 + rng() * 0.4), spread);
+        place(new IcosahedronGeometry(0.75, profile.icosahedronDetail), color);
+      }
+    }
+  }
+
+  const material = new MeshLambertMaterial({ vertexColors: true, flatShading: true });
+  applyCaustics(material, time, causticsEnabled, new Color(preset.caustics.tint));
+
+  const mesh = new Mesh(mergeBaked(parts), material);
+  mesh.name = "rocks";
+  return mesh;
 }
 
 /**
@@ -506,7 +581,7 @@ export interface Environment {
   readonly group: Group;
   readonly coralClusterCenters: readonly Vector3[];
   update(elapsed: number): void;
-  /** Rebuild floor/coral/seaweed/godRays at a new detail level, object count, and/or preset (SPEC §6.5.3). */
+  /** Rebuild floor/coral/rocks/seaweed/godRays at a new detail level, object count, and/or preset (SPEC §6.5.3). */
   rebuild(detail: DetailLevel, objectCountScale: number, preset?: EnvironmentPreset): void;
   /** Live light-intensity multiplier and caustics on/off (SPEC §6.5.3, instant). */
   setLighting(intensityScale: number, caustics: boolean): void;
@@ -536,6 +611,26 @@ function disposeMesh(mesh: Mesh | InstancedMesh): void {
   } else {
     mesh.material.dispose();
   }
+}
+
+const REEF_CORAL_SHARE = 0.7;
+
+/** Splits scatter points into coral-bound vs. rock-bound sets: cliff -> rock always; reef -> coral most of the time, rock otherwise; sand -> neither. */
+function partitionScatterPoints(
+  rng: () => number,
+  points: readonly ScatterPoint[],
+): { coralPoints: ScatterPoint[]; rockPoints: ScatterPoint[] } {
+  const coralPoints: ScatterPoint[] = [];
+  const rockPoints: ScatterPoint[] = [];
+  for (const point of points) {
+    if (point.biome === "cliff") {
+      rockPoints.push(point);
+    } else if (point.biome === "reef") {
+      if (rng() < REEF_CORAL_SHARE) coralPoints.push(point);
+      else rockPoints.push(point);
+    }
+  }
+  return { coralPoints, rockPoints };
 }
 
 /** Populate the scene with fog, lights and the whole procedural reef. */
@@ -570,25 +665,22 @@ export function createEnvironment(
   const profile = BACKGROUND_DETAIL_PROFILES[detail];
   const { coralClusters, seaweedCount } = computeObjectCounts(objectCountScale);
 
-  let floor = createFloor(time, profile.floorSegments, causticsEnabled, preset);
-  let { mesh: coral, clusterCenters } = createCoral(
-    rng,
-    time,
-    profile.coral,
-    coralClusters,
-    causticsEnabled,
-    preset,
-  );
+  const scatterPoints = computeScatterPoints(rng, coralClusters, preset.terrain);
+  const { coralPoints, rockPoints } = partitionScatterPoints(rng, scatterPoints);
+
+  let floor = createFloor(time, profile.floorSegments, causticsEnabled, preset, scatterPoints);
+  let coral = createCoral(rng, time, profile.coral, coralPoints, causticsEnabled, preset);
+  let rocks = createRocks(rng, time, profile.coral, rockPoints, causticsEnabled, preset);
   let seaweed = createSeaweed(rng, time, profile.seaweedHeightSegments, seaweedCount, preset);
   let godRays = createGodRays(rng, preset);
 
-  group.add(floor, coral, seaweed);
+  group.add(floor, coral, rocks, seaweed);
   group.add(hemisphere, sun, rim, godRays);
   scene.add(group);
 
   return {
     group,
-    coralClusterCenters: clusterCenters,
+    coralClusterCenters: coralPoints.map((point) => point.position),
     update(elapsed: number): void {
       time.value = elapsed;
       // Barely perceptible drift of the light shafts.
@@ -602,13 +694,23 @@ export function createEnvironment(
     ): void {
       const nextProfile = BACKGROUND_DETAIL_PROFILES[nextDetail];
       const counts = computeObjectCounts(nextObjectCountScale);
+      const nextScatterPoints = computeScatterPoints(rng, counts.coralClusters, nextPreset.terrain);
+      const nextPartition = partitionScatterPoints(rng, nextScatterPoints);
 
-      const nextFloor = createFloor(time, nextProfile.floorSegments, causticsEnabled, nextPreset);
-      const nextCoralResult = createCoral(
+      const nextFloor = createFloor(time, nextProfile.floorSegments, causticsEnabled, nextPreset, nextScatterPoints);
+      const nextCoral = createCoral(
         rng,
         time,
         nextProfile.coral,
-        counts.coralClusters,
+        nextPartition.coralPoints,
+        causticsEnabled,
+        nextPreset,
+      );
+      const nextRocks = createRocks(
+        rng,
+        time,
+        nextProfile.coral,
+        nextPartition.rockPoints,
         causticsEnabled,
         nextPreset,
       );
@@ -621,15 +723,16 @@ export function createEnvironment(
       );
       const nextGodRays = createGodRays(rng, nextPreset);
 
-      group.add(nextFloor, nextCoralResult.mesh, nextSeaweed, nextGodRays);
+      group.add(nextFloor, nextCoral, nextRocks, nextSeaweed, nextGodRays);
       disposeMesh(floor);
       disposeMesh(coral);
+      disposeMesh(rocks);
       disposeMesh(seaweed);
       disposeMesh(godRays);
 
       floor = nextFloor;
-      coral = nextCoralResult.mesh;
-      clusterCenters = nextCoralResult.clusterCenters;
+      coral = nextCoral;
+      rocks = nextRocks;
       seaweed = nextSeaweed;
       godRays = nextGodRays;
     },
@@ -649,7 +752,7 @@ export function createEnvironment(
       rim.color.set(nextPreset.lighting.rim);
     },
     dispose(): void {
-      for (const mesh of [floor, coral, seaweed, godRays]) disposeMesh(mesh);
+      for (const mesh of [floor, coral, rocks, seaweed, godRays]) disposeMesh(mesh);
       group.removeFromParent();
     },
   };

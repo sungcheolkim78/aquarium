@@ -4,24 +4,25 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { Color, Scene } from "three";
+import { Color, Scene, Vector3 } from "three";
 
 import { BACKGROUND_DETAIL_PROFILES, DEFAULT_ENVIRONMENT_PRESET, SCENE, SEAWEED_COUNT, type EnvironmentPreset } from "./config";
 import { createRng } from "./fish";
 import {
   classifyBiome,
-  computeCoralClusterCenters,
   computeObjectCounts,
   computeScatterPoints,
   createCoral,
   createEnvironment,
   createFloor,
+  createRocks,
   createSeaweed,
   mergeBaked,
   terrainCurvature,
   terrainHeight,
   terrainSlope,
   type Biome,
+  type ScatterPoint,
 } from "./environment";
 
 function triangleCount(geometry: { getAttribute(name: string): { count: number } }): number {
@@ -148,14 +149,101 @@ describe("computeScatterPoints", () => {
   });
 });
 
+describe("createRocks", () => {
+  it("bakes every vertex to the preset's flat rock color", () => {
+    const time = { value: 0 };
+    const preset = { ...TEST_PRESET, terrain: { ...TEST_PRESET.terrain, rockColor: "#ff00ff" } };
+    const points: ScatterPoint[] = [
+      { position: new Vector3(0, 0, 0), biome: "reef" },
+      { position: new Vector3(3, 0, 3), biome: "cliff" },
+    ];
+    const mesh = createRocks(createRng(1), time, BACKGROUND_DETAIL_PROFILES.medium.coral, points, undefined, preset);
+    const color = mesh.geometry.getAttribute("color");
+    for (let i = 0; i < color.count; i += 1) {
+      expect(color.getY(i)).toBe(0);
+      expect(color.getX(i)).toBeGreaterThan(0);
+      expect(color.getZ(i)).toBeGreaterThan(0);
+    }
+    mesh.geometry.dispose();
+    (mesh.material as { dispose(): void }).dispose();
+  });
+
+  it("gives cliff points a taller silhouette than reef points", () => {
+    const time = { value: 0 };
+    const reefOnly = createRocks(createRng(2), time, BACKGROUND_DETAIL_PROFILES.medium.coral, [
+      { position: new Vector3(0, 0, 0), biome: "reef" },
+    ]);
+    const cliffOnly = createRocks(createRng(2), time, BACKGROUND_DETAIL_PROFILES.medium.coral, [
+      { position: new Vector3(0, 0, 0), biome: "cliff" },
+    ]);
+    reefOnly.geometry.computeBoundingBox();
+    cliffOnly.geometry.computeBoundingBox();
+    const reefBox = reefOnly.geometry.boundingBox as { min: { y: number }; max: { y: number } };
+    const cliffBox = cliffOnly.geometry.boundingBox as { min: { y: number }; max: { y: number } };
+    expect(cliffBox.max.y - cliffBox.min.y).toBeGreaterThan(reefBox.max.y - reefBox.min.y);
+    reefOnly.geometry.dispose();
+    cliffOnly.geometry.dispose();
+    (reefOnly.material as { dispose(): void }).dispose();
+    (cliffOnly.material as { dispose(): void }).dispose();
+  });
+
+  it("produces a finite, non-indexed mesh", () => {
+    const time = { value: 0 };
+    const points: ScatterPoint[] = [{ position: new Vector3(1, 0, 1), biome: "cliff" }];
+    const mesh = createRocks(createRng(4), time, BACKGROUND_DETAIL_PROFILES.medium.coral, points);
+    expect(mesh.geometry.index).toBeNull();
+    for (const value of mesh.geometry.getAttribute("position").array) {
+      expect(Number.isFinite(value)).toBe(true);
+    }
+    mesh.geometry.dispose();
+    (mesh.material as { dispose(): void }).dispose();
+  });
+});
+
+describe("createFloor cliff tinting", () => {
+  it("tints vertices near a cliff scatter point measurably toward the preset's rockColor", () => {
+    const time = { value: 0 };
+    const preset = { ...TEST_PRESET, terrain: { ...TEST_PRESET.terrain, rockColor: "#00ff00" } };
+    const cliffPoint: ScatterPoint = { position: new Vector3(0, 0, 0), biome: "cliff" };
+    const withCliff = createFloor(time, 8, undefined, preset, [cliffPoint]);
+    const withoutCliff = createFloor(time, 8, undefined, preset, []);
+    const colorWith = withCliff.geometry.getAttribute("color");
+    const colorWithout = withoutCliff.geometry.getAttribute("color");
+    const position = withCliff.geometry.getAttribute("position");
+
+    let nearestIndex = 0;
+    let nearestDistSq = Infinity;
+    for (let i = 0; i < position.count; i += 1) {
+      const dx = position.getX(i) - cliffPoint.position.x;
+      const dz = position.getZ(i) - cliffPoint.position.z;
+      const distSq = dx * dx + dz * dz;
+      if (distSq < nearestDistSq) {
+        nearestDistSq = distSq;
+        nearestIndex = i;
+      }
+    }
+    expect(colorWith.getY(nearestIndex)).toBeGreaterThan(colorWithout.getY(nearestIndex));
+
+    withCliff.geometry.dispose();
+    withoutCliff.geometry.dispose();
+    (withCliff.material as { dispose(): void }).dispose();
+    (withoutCliff.material as { dispose(): void }).dispose();
+  });
+});
+
 describe("environment preset color consumption", () => {
   it("createCoral bakes every vertex from the single supplied coral color", () => {
     const time = { value: 0 };
-    const { mesh } = createCoral(
+    const points: ScatterPoint[] = [
+      { position: new Vector3(0, 0, 0), biome: "reef" },
+      { position: new Vector3(2, 0, 2), biome: "reef" },
+      { position: new Vector3(-2, 0, -2), biome: "reef" },
+    ];
+    const mesh = createCoral(
       createRng(1),
       time,
       BACKGROUND_DETAIL_PROFILES.medium.coral,
-      3,
+      points,
       undefined,
       TEST_PRESET,
     );
@@ -213,29 +301,32 @@ describe("environment preset color consumption", () => {
     env.dispose();
   });
 
-  it("Environment.setPreset updates fog/background colors without replacing floor/coral/seaweed mesh instances", () => {
+  it("Environment.setPreset updates fog/background colors without replacing floor/coral/rocks/seaweed mesh instances", () => {
     const scene = new Scene();
     const env = createEnvironment(scene, createRng(3));
     const floorBefore = env.group.getObjectByName("floor");
     const coralBefore = env.group.getObjectByName("coral");
+    const rocksBefore = env.group.getObjectByName("rocks");
     const seaweedBefore = env.group.getObjectByName("seaweed");
 
     env.setPreset(TEST_PRESET);
 
     expect(env.group.getObjectByName("floor")).toBe(floorBefore);
     expect(env.group.getObjectByName("coral")).toBe(coralBefore);
+    expect(env.group.getObjectByName("rocks")).toBe(rocksBefore);
     expect(env.group.getObjectByName("seaweed")).toBe(seaweedBefore);
     const fog = scene.fog as unknown as { density: number };
     expect(fog.density).toBe(TEST_PRESET.water.fogDensity);
     env.dispose();
   });
 
-  it("Environment.rebuild with a changed preset replaces floor/coral/seaweed/godRays with new mesh instances", () => {
+  it("Environment.rebuild with a changed preset replaces floor/coral/rocks/seaweed/godRays with new mesh instances", () => {
     const scene = new Scene();
     const env = createEnvironment(scene, createRng(3));
     const before = {
       floor: env.group.getObjectByName("floor"),
       coral: env.group.getObjectByName("coral"),
+      rocks: env.group.getObjectByName("rocks"),
       seaweed: env.group.getObjectByName("seaweed"),
       godRays: env.group.getObjectByName("godRays"),
     };
@@ -244,6 +335,7 @@ describe("environment preset color consumption", () => {
 
     expect(env.group.getObjectByName("floor")).not.toBe(before.floor);
     expect(env.group.getObjectByName("coral")).not.toBe(before.coral);
+    expect(env.group.getObjectByName("rocks")).not.toBe(before.rocks);
     expect(env.group.getObjectByName("seaweed")).not.toBe(before.seaweed);
     expect(env.group.getObjectByName("godRays")).not.toBe(before.godRays);
     env.dispose();
@@ -256,14 +348,22 @@ describe("background detail profiles", () => {
     expect(BACKGROUND_DETAIL_PROFILES.medium.seaweedHeightSegments).toBe(4);
   });
 
-  it("scales the whole background (floor+coral+seaweed) to ~2.25x (+125%) at high, within 2.0~2.5x (AC-3)", () => {
+  it("scales the whole background (floor+coral+rocks+seaweed) to ~2.25x (+125%) at high, within 2.0~2.5x (AC-3)", () => {
     const time = { value: 0 };
+    const terrain = DEFAULT_ENVIRONMENT_PRESET.terrain;
 
+    const mediumPoints = computeScatterPoints(createRng(1), SCENE.coral.clusters, terrain);
+    const mediumNonSand = mediumPoints.filter((p) => p.biome !== "sand");
     const mediumTotal =
-      triangleCount(createFloor(time, BACKGROUND_DETAIL_PROFILES.medium.floorSegments).geometry) +
       triangleCount(
-        createCoral(createRng(1), time, BACKGROUND_DETAIL_PROFILES.medium.coral, SCENE.coral.clusters)
-          .mesh.geometry,
+        createFloor(time, BACKGROUND_DETAIL_PROFILES.medium.floorSegments, undefined, undefined, mediumPoints)
+          .geometry,
+      ) +
+      triangleCount(
+        createCoral(createRng(1), time, BACKGROUND_DETAIL_PROFILES.medium.coral, mediumNonSand).geometry,
+      ) +
+      triangleCount(
+        createRocks(createRng(1), time, BACKGROUND_DETAIL_PROFILES.medium.coral, mediumNonSand).geometry,
       ) +
       triangleCount(
         createSeaweed(
@@ -274,11 +374,18 @@ describe("background detail profiles", () => {
         ).geometry,
       );
 
+    const highPoints = computeScatterPoints(createRng(1), SCENE.coral.clusters, terrain);
+    const highNonSand = highPoints.filter((p) => p.biome !== "sand");
     const highTotal =
-      triangleCount(createFloor(time, BACKGROUND_DETAIL_PROFILES.high.floorSegments).geometry) +
       triangleCount(
-        createCoral(createRng(1), time, BACKGROUND_DETAIL_PROFILES.high.coral, SCENE.coral.clusters)
-          .mesh.geometry,
+        createFloor(time, BACKGROUND_DETAIL_PROFILES.high.floorSegments, undefined, undefined, highPoints)
+          .geometry,
+      ) +
+      triangleCount(
+        createCoral(createRng(1), time, BACKGROUND_DETAIL_PROFILES.high.coral, highNonSand).geometry,
+      ) +
+      triangleCount(
+        createRocks(createRng(1), time, BACKGROUND_DETAIL_PROFILES.high.coral, highNonSand).geometry,
       ) +
       triangleCount(
         createSeaweed(
@@ -322,24 +429,16 @@ describe("computeObjectCounts (SPEC §6.5.4)", () => {
   });
 });
 
-describe("computeCoralClusterCenters", () => {
-  it("returns one finite center per cluster, deterministic for the same seed", () => {
-    const a = computeCoralClusterCenters(createRng(3), 22);
-    const b = computeCoralClusterCenters(createRng(3), 22);
-    expect(a).toHaveLength(22);
-    for (const center of a) {
-      expect(Number.isFinite(center.x)).toBe(true);
-      expect(Number.isFinite(center.z)).toBe(true);
-    }
-    expect(a.map((c) => [c.x, c.z])).toEqual(b.map((c) => [c.x, c.z]));
-  });
-});
-
 describe("createEnvironment", () => {
-  it("exposes one coral cluster center per configured cluster", () => {
+  it("exposes coral cluster centers as a subset (reef-classified, coral-assigned) of the configured cluster count", () => {
     const scene = new Scene();
     const env = createEnvironment(scene, createRng(3));
-    expect(env.coralClusterCenters).toHaveLength(SCENE.coral.clusters);
+    expect(env.coralClusterCenters.length).toBeLessThanOrEqual(SCENE.coral.clusters);
+    for (const center of env.coralClusterCenters) {
+      expect(Number.isFinite(center.x)).toBe(true);
+      expect(Number.isFinite(center.y)).toBe(true);
+      expect(Number.isFinite(center.z)).toBe(true);
+    }
     env.dispose();
   });
 });

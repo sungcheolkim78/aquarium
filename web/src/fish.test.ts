@@ -6,7 +6,7 @@
 import { describe, expect, it } from "vitest";
 import { Raycaster, Vector3 } from "three";
 
-import { FISH_REGISTRY, SCENE, totalFishCount, type FishSpecies } from "./config";
+import { DEFAULT_ENVIRONMENT_PRESET, FISH_REGISTRY, SCENE, totalFishCount, type FishSpecies } from "./config";
 import {
   buildFishGeometry,
   buildCreatureGeometry,
@@ -22,7 +22,7 @@ import {
   type Boid,
 } from "./fish";
 import { fishBodyRadius } from "./creatures/geometry/fish";
-import { computeCoralClusterCenters } from "./environment";
+import { computeScatterPoints } from "./environment";
 import {
   buildSharkGeometry,
   sharkBodyRadius,
@@ -663,8 +663,8 @@ describe("FishSchool", () => {
 
   it("stays inside the performance budget of N1", () => {
     const schools = createSchools();
-    // One draw call per school plus floor, coral, seaweed, god rays and bubbles.
-    const drawCalls = schools.length + 5;
+    // One draw call per school plus floor, coral, rocks, seaweed, god rays and bubbles.
+    const drawCalls = schools.length + 6;
     let triangles = 0;
     for (const school of schools) {
       const geometry = school.mesh.geometry;
@@ -1037,7 +1037,9 @@ describe("60-second fixed-seed acceptance run (§4.3 AC)", () => {
   it(
     "keeps every swim-locomotion boid finite, in bounds, and within its turn-rate budget for 60 simulated seconds",
     () => {
-    const clusterCenters = computeCoralClusterCenters(createRng(0x5eed), SCENE.coral.clusters);
+    const clusterCenters = computeScatterPoints(createRng(0x5eed), SCENE.coral.clusters, DEFAULT_ENVIRONMENT_PRESET.terrain)
+      .filter((point) => point.biome === "reef")
+      .map((point) => point.position);
     const schools = createSchools(FISH_REGISTRY, createRng(0x5eed), { coralClusterCenters: clusterCenters });
     const dt = 1 / 60;
     const ceilingY = SCENE.floorY + SCENE.bounds.y * 2;

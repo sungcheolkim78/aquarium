@@ -12,6 +12,7 @@ import {
   FISH_REGISTRY,
   MOOD_PRESETS,
   SETTINGS_LIMITS,
+  resolveEnvironmentPreset,
   type AquariumSettings,
   type DetailLevel,
   type FishSpecies,
@@ -20,7 +21,14 @@ import {
 import type { Material } from "three";
 
 import { buildCreatureGeometry, createRng } from "./fish";
-import { computeObjectCounts, createCoral, createFloor, createSeaweed } from "./environment";
+import {
+  computeObjectCounts,
+  computeScatterPoints,
+  createCoral,
+  createFloor,
+  createRocks,
+  createSeaweed,
+} from "./environment";
 
 function disposeMaterial(material: Material | Material[]): void {
   if (Array.isArray(material)) {
@@ -412,20 +420,32 @@ export function estimateTriangleBudget(
 
   const profile = BACKGROUND_DETAIL_PROFILES[settings.background.detail];
   const { coralClusters, seaweedCount } = computeObjectCounts(settings.background.objectCountScale);
+  const preset = resolveEnvironmentPreset(settings.background.presetId);
   const time = { value: 0 };
   const rng = createRng(0x5eed_a17c);
 
-  const floor = createFloor(time, profile.floorSegments);
+  const scatterPoints = computeScatterPoints(rng, coralClusters, preset.terrain);
+  // Conservative worst case: at runtime every non-sand point becomes either a
+  // coral cluster or a rock formation, never both — summing both here
+  // over-estimates rather than under-estimates the real triangle count.
+  const nonSandPoints = scatterPoints.filter((point) => point.biome !== "sand");
+
+  const floor = createFloor(time, profile.floorSegments, undefined, preset, scatterPoints);
   total += floor.geometry.getAttribute("position").count / 3;
   floor.geometry.dispose();
   disposeMaterial(floor.material);
 
-  const coral = createCoral(rng, time, profile.coral, coralClusters);
-  total += coral.mesh.geometry.getAttribute("position").count / 3;
-  coral.mesh.geometry.dispose();
-  disposeMaterial(coral.mesh.material);
+  const coral = createCoral(rng, time, profile.coral, nonSandPoints, undefined, preset);
+  total += coral.geometry.getAttribute("position").count / 3;
+  coral.geometry.dispose();
+  disposeMaterial(coral.material);
 
-  const seaweed = createSeaweed(rng, time, profile.seaweedHeightSegments, seaweedCount);
+  const rocks = createRocks(rng, time, profile.coral, nonSandPoints, undefined, preset);
+  total += rocks.geometry.getAttribute("position").count / 3;
+  rocks.geometry.dispose();
+  disposeMaterial(rocks.material);
+
+  const seaweed = createSeaweed(rng, time, profile.seaweedHeightSegments, seaweedCount, preset);
   total += (seaweed.geometry.getAttribute("position").count / 3) * seaweed.count;
   seaweed.geometry.dispose();
   disposeMaterial(seaweed.material);
