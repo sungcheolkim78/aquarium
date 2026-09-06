@@ -414,7 +414,6 @@ export const FISH_REGISTRY: readonly FishSpecies[] = [
 export const totalFishCount = (registry: readonly FishSpecies[] = FISH_REGISTRY): number =>
   registry.reduce((sum, species) => sum + species.count, 0);
 
-/** User-adjustable scene configuration, persisted via `settings.ts` (SPEC §6.5.2). */
 /** One named "location" color scheme — water/light/floor/coral/seaweed/bubble hues (docs/superpowers/specs/2026-09-06-environment-color-presets-design.md). */
 export interface EnvironmentPreset {
   readonly id: string;
@@ -461,6 +460,7 @@ export function resolveEnvironmentPreset(id: string): EnvironmentPreset {
   return ENVIRONMENT_PRESETS[id] ?? DEFAULT_ENVIRONMENT_PRESET;
 }
 
+/** User-adjustable scene configuration, persisted via `settings.ts` (SPEC §6.5.2). */
 export interface AquariumSettings {
   readonly schemaVersion: 1;
   readonly fish: {
