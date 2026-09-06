@@ -10,27 +10,29 @@
 - Runtime YAML fetching — species files are read at build/dev time only (static, backend-free site).
 - Byte-for-byte visual parity with the current 6 species. Migrated species should look *recognizably similar* (same palette, same rough silhouette family) but exact vertex positions are expected to change.
 
-## 1. Architecture
+## 1. Architecture — namespaced by creature kind, fish first
+
+Species YAML loading is organized under the existing `creatures/` namespace, mirroring the `creatures/geometry/{fish,shark,seahorse,turtle}.ts` pattern that already exists for geometry construction. `fish` is the first kind wired up; `shark`/`seahorse`/`turtle` are expected to gain their own YAML files and loader modules later by following the exact same shape, not by inventing a new pattern:
 
 ```
-web/species/*.yaml            -- one file per lowpoly-fish species
+web/species/fish/*.yaml            -- one file per lowpoly-fish species (kind-namespaced)
         |
-        v  import.meta.glob('/species/*.yaml', { query: '?raw', import: 'default', eager: true })
-web/src/species-loader.ts     -- parses (yaml pkg) + validates -> FishSpecies[], filename order
+        v  import.meta.glob('/species/fish/*.yaml', { query: '?raw', import: 'default', eager: true })
+web/src/creatures/species/fish.ts  -- parses (yaml pkg) + validates -> FishSpecies[], filename order
         |
         v
-web/src/config.ts             -- FISH_REGISTRY = [...FISH_SPECIES_FROM_YAML, sharkSpecies, seahorseSpecies, turtleSpecies]
+web/src/config.ts                  -- FISH_REGISTRY = [...loadFishSpeciesFromYaml(), sharkSpecies, seahorseSpecies, turtleSpecies]
 ```
 
-- New directory `web/species/`, one YAML file per species, numbered so glob order (which Vite returns sorted by path) matches the existing registry order: `01-clownfish.yaml`, `02-blue-sea-bream.yaml`, `03-yellow-tang.yaml`, `04-butterflyfish.yaml`, `05-purple-tang.yaml`, `06-pink-cardinalfish.yaml`.
-- New module `web/src/species-loader.ts`:
+- New directory `web/species/fish/`, one YAML file per species, numbered so glob order (which Vite returns sorted by path) matches the existing registry order: `01-clownfish.yaml`, `02-blue-sea-bream.yaml`, `03-yellow-tang.yaml`, `04-butterflyfish.yaml`, `05-purple-tang.yaml`, `06-pink-cardinalfish.yaml`. A later `shark`/`seahorse`/`turtle` YAML migration would add sibling `web/species/shark/*.yaml` etc.
+- New module `web/src/creatures/species/fish.ts` (sibling to `creatures/geometry/fish.ts`):
   ```ts
-  export function parseSpeciesYaml(raw: string, filename: string): FishSpecies; // throws Error("<filename>: <reason>") on any missing/invalid field
-  export const FISH_SPECIES_FROM_YAML: readonly FishSpecies[]; // eager-loaded at module init, filename order
+  export function parseFishSpeciesYaml(raw: string, filename: string): FishSpecies; // throws Error("<filename>: <reason>") on any missing/invalid field
+  export function loadFishSpeciesFromYaml(): readonly FishSpecies[]; // eager-loaded at call time, filename order
   ```
-  A malformed file throws at module-init time, which fails `npm run dev`/`npm run build` immediately (a build-time boundary check — no runtime fallback for a state that can't reach production).
-- `config.ts`'s `FISH_REGISTRY` becomes the loader's output concatenated with the existing hardcoded `great-white-shark`, `seahorse`, `green-sea-turtle` entries, in that order — preserving today's exact registry order (and thus most `fish.test.ts` ordering assertions untouched).
-- New runtime dependency: `yaml` (added to `web/package.json` under `dependencies`, since `species-loader.ts` ships in the production bundle).
+  A malformed file throws at module-init time, which fails `npm run dev`/`npm run build` immediately (a build-time boundary check — no runtime fallback for a state that can't reach production). A thin `web/src/creatures/species/index.ts` barrel re-exports each kind's loader, mirroring `creatures/geometry/index.ts`.
+- `config.ts`'s `FISH_REGISTRY` becomes `loadFishSpeciesFromYaml()`'s output concatenated with the existing hardcoded `great-white-shark`, `seahorse`, `green-sea-turtle` entries, in that order — preserving today's exact registry order (and thus most `fish.test.ts` ordering assertions untouched).
+- New runtime dependency: `yaml` (added to `web/package.json` under `dependencies`, since `creatures/species/fish.ts` ships in the production bundle).
 
 ## 2. Species YAML schema
 
@@ -66,7 +68,7 @@ shape:
   pattern:     { stripes: 3 }
 ```
 
-`behavior`, `palette` (minus the new optional `eye`), `count`, `id`, `label`, `description` are unchanged from today's `CreatureDefinition`/`FishSpecies` fields — only `shape` is redesigned. `species-loader.ts` validates: all required numeric fields present and finite, `snout.length + peduncle.length < 1`, `count`/`length`/etc. `> 0`, `id` non-empty and matches the filename's species slug (sanity check against typos).
+`behavior`, `palette` (minus the new optional `eye`), `count`, `id`, `label`, `description` are unchanged from today's `CreatureDefinition`/`FishSpecies` fields — only `shape` is redesigned. `creatures/species/fish.ts` validates: all required numeric fields present and finite, `snout.length + peduncle.length < 1`, `count`/`length`/etc. `> 0`, `id` non-empty and matches the filename's species slug (sanity check against typos).
 
 **Segment/tessellation counts are *not* authored per species.** Detail (low/medium/high) stays a global, user-controlled axis independent of species identity — see §4.
 
@@ -117,34 +119,35 @@ Only emitted if `shape.thread` is present. `fishThread(shape, finSegments)`: a q
 
 ## 4. Detail levels & triangle budget
 
-`FishDetailProfile` (`config.ts`) gains one field, `finSegments`, shared by the tail/dorsal/pectoral/thread constructions above; `bodySegments` is reinterpreted as the **main-body zone's** segment count, with the snout and peduncle zones deriving their own segment counts as a fixed fraction of it (`max(2, round(bodySegments * 0.4))` each) rather than adding more species-facing or profile-facing fields:
+No facet jitter at any detail tier — `computeFacetJitter` and the `facetJitter` field are **removed**, not just zeroed at `high`. Jitter existed to fake extra visual complexity by perturbing a fixed low segment count; now that `high` gets real additional segments (below), faking it on top would just look noisy without adding information, and keeping an always-zero field around would be dead configuration surface.
 
-| detail | bodySegments (main) | snout/peduncle segments (each) | ringSides | finSegments | facetJitter |
-|---|---|---|---|---|---|
-| low | 3 | 2 | 4 | 2 | 0 |
-| medium | 5 | 2 | 5 | 3 | 0 |
-| high | 10 | 4 | 6 | 5 | 0.16 |
+`FishDetailProfile` (`config.ts`) gains one field, `finSegments`, shared by the tail/dorsal/pectoral/thread constructions above; `bodySegments` is reinterpreted as the **main-body zone's** segment count, with the snout and peduncle zones deriving their own segment counts as a fixed fraction of it (`max(2, round(bodySegments * 0.4))` each) rather than adding more species-facing or profile-facing fields. The remaining triangle budget is large (see below), so all three tiers are pushed noticeably higher than the previous design's numbers, not just higher than today's shipped profile:
 
-Illustrative medium-detail triangle count for a species with a `thread` (upper bound) vs. without:
+| detail | bodySegments (main) | snout/peduncle segments (each) | ringSides | finSegments |
+|---|---|---|---|---|
+| low | 4 | 2 | 5 | 3 |
+| medium | 8 | 3 | 7 | 4 |
+| high | 16 | 5 | 10 | 7 |
 
-| piece | today | new (medium, no thread) |
-|---|---|---|
-| body loft (snout+main+peduncle segments) | ~40 (5×4×2) | ~90 (9 segments [5+2+2] × 5 sides × 2) |
-| tail fin | 4 | 6 (3-seg fan × 2 lobes) |
-| dorsal fin | 2 | 8 (4-seg ridge strip) |
-| pelvic fin (new) | 0 | 4 |
-| pectoral fin | 4 | 6 (3-seg fan × 2) |
-| eye (new) | 0 | 16 (8 tri × 2) |
-| thread (optional) | 0 | 0 / +6 (3-seg ribbon × 2 tri) |
-| **total** | **~50** | **~130 (~136 with thread)** |
+Illustrative triangle count per tier for a species *without* a `thread` (thread adds `2 * finSegments` more when present — see §3.6):
 
-~2.6–3x today's baseline, matching the "2배 이상" target. Scene-wide, this is still trivial against the SPEC N1 budget: 54 lowpoly-fish instances × ~150 tri ≈ 8,100 triangles, vs. the 300k ceiling (draw-call count is unaffected — still one `InstancedMesh` per species).
+| piece | today (medium) | low | medium | high |
+|---|---|---|---|---|
+| body loft (snout+main+peduncle segments) | ~40 (5×4×2) | 80 (8 segs × 5 sides × 2) | 196 (14 segs × 7 sides × 2) | 520 (26 segs × 10 sides × 2) |
+| tail fin | 4 | 6 (3-seg fan × 2 lobes) | 8 (4-seg fan × 2) | 14 (7-seg fan × 2) |
+| dorsal fin | 2 | 4 (3-seg ridge strip) | 6 (4-seg ridge strip) | 12 (7-seg ridge strip) |
+| pelvic fin (new, fixed) | 0 | 4 | 4 | 4 |
+| pectoral fin | 4 | 6 (3-seg fan × 2) | 8 (4-seg fan × 2) | 14 (7-seg fan × 2) |
+| eye (new, fixed) | 0 | 16 (8 tri × 2) | 16 | 16 |
+| **total** | **~50** | **~116** | **~238** | **~580** |
 
-`fish.test.ts`'s current `expect(position.count / 3).toBeLessThan(100)` regression bound is raised to reflect the new target (e.g. `< 220`, comfortably covering the high-detail + thread case); the exact number is tuned during implementation against real output, not pre-committed here.
+Medium is ~4.8x today's baseline, high is ~11.6x — a deliberately generous jump given the confirmed headroom. Scene-wide this is still trivial against the SPEC N1 budget: even at `high` detail, 54 lowpoly-fish instances × ~580 tri ≈ 31,300 triangles, vs. the 300k ceiling (draw-call count is unaffected — still one `InstancedMesh` per species). Pelvic fin and eye stay fixed-cost across tiers (they're small, simple shapes; scaling them with detail would add complexity for triangles nobody will notice).
+
+`fish.test.ts`'s current `expect(position.count / 3).toBeLessThan(100)` regression bound is raised to reflect the new target (comfortably above the `high` + thread case, e.g. `< 650`); the exact number is tuned during implementation against real output, not pre-committed here. The existing low ≤ medium ≤ high ordering test and the "high ≈ 2.3–2.7× medium" ratio test keep the same invariant shape with the new numbers (580/238 ≈ 2.44, inside that range).
 
 ## 5. Migration of the existing 6 species
 
-Each of `clownfish`, `blue-sea-bream`, `yellow-tang`, `butterflyfish`, `purple-tang`, `pink-cardinalfish` becomes one `web/species/NN-<id>.yaml`. Field mapping from the current `FishShape`:
+Each of `clownfish`, `blue-sea-bream`, `yellow-tang`, `butterflyfish`, `purple-tang`, `pink-cardinalfish` becomes one `web/species/fish/NN-<id>.yaml`. Field mapping from the current `FishShape`:
 
 | old field | new field(s) |
 |---|---|
@@ -159,10 +162,10 @@ New fields get reasonable species-appropriate defaults during implementation (e.
 
 ## 6. Testing plan
 
-- `species-loader.test.ts` (new): valid YAML round-trips into the expected `FishSpecies` shape; each documented failure mode (missing required field, `snout.length + peduncle.length >= 1`, non-finite number, `id` not matching filename slug) throws with a message naming the offending file.
+- `creatures/species/fish.test.ts` (new): valid YAML round-trips into the expected `FishSpecies` shape; each documented failure mode (missing required field, `snout.length + peduncle.length >= 1`, non-finite number, `id` not matching filename slug) throws with a message naming the offending file.
 - `fish.test.ts` updates:
-  - Remove the "vertex-for-vertex regression of v1" test (§AC-9's old byte-identical guarantee no longer holds by design) — replace with a determinism test: same species + same detail → identical output across two calls (already how the shark/seahorse suites test their own builders).
-  - Raise the low-poly triangle ceiling to the new target (tuned during implementation).
+  - Remove the "vertex-for-vertex regression of v1" test and the `computeFacetJitter`/jitter-specific test block (§AC-9's old guarantees no longer hold — the mechanism they tested is gone) — replace the regression test with a determinism test: same species + same detail → identical output across two calls (already how the shark/seahorse suites test their own builders).
+  - Raise the low-poly triangle ceiling to the new target (tuned during implementation, comfortably above the `high` total in §4).
   - Keep the existing low ≤ medium ≤ high ordering test and the "high ≈ 2.3–2.7× medium" ratio test — same invariant, new numbers.
   - Add one unit-test block per new pure function (`fishBodyRadius`, `fishTailFin`, `fishDorsalFin`, `fishPelvicFin`, `fishPectoralFin`, `fishThread`, `fishEyePoints`), mirroring the parameter-sensitivity style already used for `sharkBodyRadius`/`sharkTailLobes`/etc. — e.g. "a higher `body.peak` shifts the max-radius ring forward," "`thread` absent → `fishThread` returns null and adds zero vertices," "`eye.radius: 0` produces no eye vertices."
   - Registry-order and registry-shape tests (`"defines a complete, well-formed entry per species"`, etc.) updated for the new nested `shape` fields; ordering assertions are unaffected since YAML filename order mirrors the current array order.
@@ -170,10 +173,10 @@ New fields get reasonable species-appropriate defaults during implementation (e.
 
 ## 7. Files touched
 
-- `web/species/01-clownfish.yaml` … `06-pink-cardinalfish.yaml` (new).
-- `web/src/species-loader.ts` (new) + `web/src/species-loader.test.ts` (new).
-- `web/src/creatures/geometry/fish.ts` — full rewrite of the body/fin/eye construction; new exported pure functions per §3.
-- `web/src/config.ts` — `FishShape` replaced by the new nested `shape` interface (snout/body/peduncle/tailFin/dorsalFin/pelvicFin/pectoralFin/thread?/eye?/pattern); `FishDetailProfile` gains `finSegments`; `FISH_REGISTRY` built from `FISH_SPECIES_FROM_YAML` + the 3 hardcoded non-fish species; the 6 migrated species' inline object literals removed.
+- `web/species/fish/01-clownfish.yaml` … `06-pink-cardinalfish.yaml` (new).
+- `web/src/creatures/species/fish.ts` (new) + `web/src/creatures/species/fish.test.ts` (new) + `web/src/creatures/species/index.ts` (new barrel, mirroring `creatures/geometry/index.ts`).
+- `web/src/creatures/geometry/fish.ts` — full rewrite of the body/fin/eye construction; new exported pure functions per §3; `computeFacetJitter` and its usage removed.
+- `web/src/config.ts` — `FishShape` replaced by the new nested `shape` interface (snout/body/peduncle/tailFin/dorsalFin/pelvicFin/pectoralFin/thread?/eye?/pattern); `FishDetailProfile` drops `facetJitter` and gains `finSegments`; `FISH_REGISTRY` built from `loadFishSpeciesFromYaml()` + the 3 hardcoded non-fish species; the 6 migrated species' inline object literals removed.
 - `web/src/fish.test.ts` — updates per §6.
 - `web/package.json` — `yaml` added to `dependencies`.
 - `docs/create_geometry_generator.md` — updated with the finalized TypeScript/three.js grammar (see that file's own new closing section).

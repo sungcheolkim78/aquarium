@@ -166,11 +166,13 @@ Low-poly Mesh
 
 위 내용은 Blender/Python 기준의 일반론이고, 실제로는 이 저장소의 스택(TypeScript + Three.js, 백엔드 없는 정적 사이트)에 맞게 구체화해서 구현합니다. 전체 설계는 `docs/superpowers/specs/2026-09-06-fish-procedural-grammar-design.md`에 있고, 핵심만 요약하면:
 
-- **YAML은 실제로 파일로 존재합니다.** `web/species/*.yaml` 한 종당 한 파일. Blender geometry nodes 대신 `web/src/creatures/geometry/fish.ts`의 순수 TypeScript 함수들이 이 YAML을 소비해 `BufferGeometry`를 만듭니다. 빌드/개발 서버가 `import.meta.glob`으로 읽어들이므로 별도 codegen 스크립트나 백엔드가 없습니다.
+- **YAML은 실제로 파일로 존재합니다.** `web/species/fish/*.yaml` 한 종당 한 파일 — 어종(creature kind)별로 디렉토리를 나눠서, 나중에 거북이/상어/해마도 `web/species/turtle/`, `web/species/shark/`, `web/species/seahorse/`처럼 같은 패턴으로 추가할 수 있게 했습니다. Blender geometry nodes 대신 `web/src/creatures/geometry/fish.ts`의 순수 TypeScript 함수들이 이 YAML을 소비해 `BufferGeometry`를 만듭니다. 빌드/개발 서버가 `import.meta.glob`으로 읽어들이므로 별도 codegen 스크립트나 백엔드가 없습니다.
+- **로더도 어종별로 분리**해서 `web/src/creatures/species/fish.ts`(`creatures/geometry/fish.ts`와 나란히 존재)에 두었습니다. 지금은 `fish` 하나뿐이지만, 나중에 상어/해마/거북이도 YAML로 옮기고 싶어지면 `creatures/species/shark.ts`처럼 같은 자리에 같은 모양으로 추가하면 됩니다 — "creature"라는 상위 개념 아래 "fish"가 첫 번째 구체 사례가 되는 구조입니다.
 - **몸통/주둥이/꼬리자루**는 위 문서가 말한 대로 하나의 부드러운 반지름 곡선이지만, 세 구간(주둥이 taper → 몸통 peak → 꼬리자루 taper)이 각각 다른 지수(exponent)를 가지도록 확장해서, 문서의 표에 나온 "elliptical loft / tapered extrusion / narrowing spline" 세 가지를 사실상 하나의 연속 함수로 구현합니다 (경계에서 값이 정확히 일치하므로 이음매가 생기지 않습니다).
 - **꼬리지느러미·등지느러미·가슴지느러미**는 문서가 제안한 "symmetric fan / spline + height profile / fan-shaped surface"를 그대로 채택하되, 세그먼트 개수(`finSegments`)는 종별 파라미터가 아니라 기존의 low/medium/high 디테일 레벨에 종속시켰습니다 — 종 저작자는 실루엣만 정의하고, 폴리곤 밀도는 기존 성능 설정 축이 그대로 담당합니다.
 - **배지느러미**는 이 문서에 있던 대로 새로 추가되는 항목이고, **눈**도 문서의 권장(UV sphere)대로 실제 지오메트리로 추가하되 low-poly 스타일에 맞춰 8각형 근사(옥타헤드론)로 구현합니다.
 - **무늬는 문서의 권장대로 지오메트리가 아니라 버텍스 컬러**로 유지합니다 (기존 `stripes` 방식 그대로).
+- **facet jitter(고해상도에서 각진 느낌을 흉내 내던 랜덤 흔들림)는 완전히 제거**했습니다. 세그먼트 수 자체를 크게 늘려 진짜 디테일을 만들기 때문에, 가짜 디테일을 얹는 이 장치는 더 이상 필요 없습니다.
 - 문서 말미의 "5 카메라 뷰 자동 렌더링 → 도감 보드 생성" 파이프라인은 이번 범위에는 포함하지 않았습니다 (구현 후 별도 브레인스토밍 대상).
 
-기존 6개 종(클라운피시, 파랑참돔, 노란열대어, 나비치, 보라탱, 자주열대어)은 새 grammar로 마이그레이션하되, 기존 렌더링과 완전히 동일하지 않아도 되는 것으로 합의했고, 종당 삼각형 수는 대략 2.5~3배(약 50개 → 약 130개)까지 늘어나는 것을 목표로 합니다 — 전체 씬 예산(SPEC N1: 드로우콜 30개, 삼각형 30만개 미만)에는 여전히 여유가 큽니다.
+기존 6개 종(클라운피시, 파랑참돔, 노란열대어, 나비치, 보라탱, 자주열대어)은 새 grammar로 마이그레이션하되, 기존 렌더링과 완전히 동일하지 않아도 되는 것으로 합의했습니다. 전체 씬 예산(SPEC N1: 드로우콜 30개, 삼각형 30만개 미만)에 여유가 많이 남아 있어서, 종당 삼각형 수를 상당히 공격적으로 늘렸습니다 — medium 기준 약 50개 → 약 240개(약 4.8배), high 기준 약 580개(약 11.6배)까지.
