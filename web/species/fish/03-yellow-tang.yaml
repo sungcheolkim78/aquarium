@@ -20,7 +20,7 @@ shape:
   snout: { length: 0.13, taper: 0.75, tipRadius: 0.07 }
   body: { length: 0.5, maxHeight: 0.44, maxWidth: 0.13, peak: 0.46, taper: 1.3, shoulderRadius: 0.8 }
   peduncle: { length: 0.15, taper: 1.8, width: 0.11 }
-  tailFin: { height: 0.23, length: 0.24, notch: 0.25 }
+  tailFin: { style: fork, height: 0.23, length: 0.24, notch: 0.25, upperColor: body, lowerColor: body }
   dorsalFin: { start: 0.24, end: 0.82, height: 0.2 }
   pelvicFin: { length: 0.1, angle: 48, at: 0.58 }
   pectoralFin: { length: 0.12, angle: 32, at: 0.26 }

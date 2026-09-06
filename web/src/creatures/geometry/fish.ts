@@ -50,24 +50,38 @@ function ringVertex(x: number, radius: number, shape: FishShape, index: number, 
   );
 }
 
-/** Symmetric parametric fan per lobe; `notch` forks the trailing edge instead of a flat wedge. */
-export function fishTailFin(
-  shape: FishShape,
-  finSegments: number,
-): { root: Vector3; upperFan: Vector3[]; lowerFan: Vector3[] } {
+/** One tail-fin lobe: a multi-facet fan from `root` out along `rim` (root-to-tip order, exclusive of `root` itself). */
+export interface FishTailLobe {
+  readonly root: Vector3;
+  readonly rim: Vector3[];
+}
+
+/**
+ * Upper/lower tail-fin lobes. For `style: "fan"` both lobes share one root at the body
+ * centreline, giving a single continuous fan (rounded/paddle silhouette). For
+ * `style: "fork"` the roots separate along y by `notch * height`, so a real V-gap
+ * opens between two distinct pointed lobes — deeper `notch` reaches further toward a
+ * lunate fork (docs/superpowers/specs/2026-09-06-fish-tail-fin-shapes-design.md).
+ */
+export function fishTailFin(shape: FishShape, finSegments: number): { upper: FishTailLobe; lower: FishTailLobe } {
   const half = shape.body.length / 2;
-  const root = new Vector3(-half, 0, 0);
   const segments = Math.max(2, finSegments);
-  const upperFan: Vector3[] = [];
-  const lowerFan: Vector3[] = [];
-  for (let i = 0; i <= segments; i += 1) {
-    const u = i / segments;
-    const x = -half - shape.tailFin.length * (shape.tailFin.notch + u * (1 - shape.tailFin.notch));
-    const y = shape.tailFin.height * u;
-    upperFan.push(new Vector3(x, y, 0));
-    lowerFan.push(new Vector3(x, -y, 0));
-  }
-  return { root, upperFan, lowerFan };
+  const spread = shape.tailFin.style === "fork" ? (shape.tailFin.notch ?? 0) * shape.tailFin.height : 0;
+
+  const buildLobe = (sign: 1 | -1): FishTailLobe => {
+    const root = new Vector3(-half, sign * spread, 0);
+    const rim: Vector3[] = [];
+    const denom = segments + 1;
+    for (let i = 1; i <= denom; i += 1) {
+      const u = i / denom;
+      const x = -half - shape.tailFin.length * u;
+      const y = sign * (spread + (shape.tailFin.height - spread) * u);
+      rim.push(new Vector3(x, y, 0));
+    }
+    return { root, rim };
+  };
+
+  return { upper: buildLobe(1), lower: buildLobe(-1) };
 }
 
 /** `finSegments` points along the body surface between `dorsalFin.start` and `dorsalFin.end`; elevation tapers to 0 at both ends. */
@@ -182,6 +196,17 @@ function octahedronFaces(center: Vector3, radius: number): ReadonlyArray<readonl
   ];
 }
 
+function resolveTailFinColor(
+  key: "body" | "fin" | "accent" | undefined,
+  bodyColor: Color,
+  finColor: Color,
+  accentColor: Color,
+): Color {
+  if (key === "body") return bodyColor;
+  if (key === "accent") return accentColor;
+  return finColor;
+}
+
 /** `null` when the eye radius resolves to 0 — either explicitly, or (never, since the default is always positive) by omission. */
 export function fishEyePoints(shape: FishShape): { left: Vector3; right: Vector3; radius: number } | null {
   const radius = shape.eye?.radius ?? 0.16 * shape.body.maxHeight;
@@ -248,11 +273,17 @@ export function buildFishGeometry(
   }
 
   const tail = fishTailFin(shape, profile.finSegments);
-  for (let i = 0; i < tail.upperFan.length - 1; i += 1) {
-    pushFin(buffers, tail.root, tail.upperFan[i] as Vector3, tail.upperFan[i + 1] as Vector3, finColor);
-  }
-  for (let i = 0; i < tail.lowerFan.length - 1; i += 1) {
-    pushFin(buffers, tail.root, tail.lowerFan[i] as Vector3, tail.lowerFan[i + 1] as Vector3, finColor);
+  const tipBandWidth = shape.tailFin.tipBandWidth ?? 0;
+  const tailLobeColors = [
+    [tail.upper, resolveTailFinColor(shape.tailFin.upperColor, bodyColor, finColor, accentColor)],
+    [tail.lower, resolveTailFinColor(shape.tailFin.lowerColor, bodyColor, finColor, accentColor)],
+  ] as const;
+  for (const [lobe, lobeColor] of tailLobeColors) {
+    for (let i = 0; i < lobe.rim.length - 1; i += 1) {
+      const u = (i + 1) / (lobe.rim.length - 1);
+      const color = tipBandWidth > 0 && u >= 1 - tipBandWidth ? accentColor : lobeColor;
+      pushFin(buffers, lobe.root, lobe.rim[i] as Vector3, lobe.rim[i + 1] as Vector3, color);
+    }
   }
 
   const dorsal = fishDorsalFin(shape, profile.finSegments);

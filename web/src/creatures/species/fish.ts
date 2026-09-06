@@ -116,13 +116,54 @@ function parsePeduncle(raw: Record<string, unknown>, filename: string): FishPedu
   };
 }
 
+function requireTailFinStyle(value: unknown, field: string, filename: string): "fan" | "fork" {
+  if (value !== "fan" && value !== "fork") {
+    throw new Error(`${filename}: "${field}" must be "fan" or "fork", got ${JSON.stringify(value)}`);
+  }
+  return value;
+}
+
+function requirePaletteKey(value: unknown, field: string, filename: string): "body" | "fin" | "accent" {
+  if (value !== "body" && value !== "fin" && value !== "accent") {
+    throw new Error(`${filename}: "${field}" must be "body", "fin", or "accent", got ${JSON.stringify(value)}`);
+  }
+  return value;
+}
+
 function parseTailFin(raw: Record<string, unknown>, filename: string): FishTailFinShape {
-  const notch = requirePositiveNumber(raw.notch, "shape.tailFin.notch", filename);
-  if (notch >= 1) throw new Error(`${filename}: "shape.tailFin.notch" must be < 1, got ${notch}`);
+  const style = requireTailFinStyle(raw.style, "shape.tailFin.style", filename);
+
+  let notch: number | undefined;
+  if (raw.notch !== undefined) {
+    notch = requirePositiveNumber(raw.notch, "shape.tailFin.notch", filename);
+    if (notch >= 1) throw new Error(`${filename}: "shape.tailFin.notch" must be < 1, got ${notch}`);
+  }
+
+  const upperColor =
+    raw.upperColor === undefined
+      ? undefined
+      : requirePaletteKey(raw.upperColor, "shape.tailFin.upperColor", filename);
+  const lowerColor =
+    raw.lowerColor === undefined
+      ? undefined
+      : requirePaletteKey(raw.lowerColor, "shape.tailFin.lowerColor", filename);
+
+  let tipBandWidth: number | undefined;
+  if (raw.tipBandWidth !== undefined) {
+    tipBandWidth = requireNumber(raw.tipBandWidth, "shape.tailFin.tipBandWidth", filename);
+    if (tipBandWidth < 0 || tipBandWidth > 1) {
+      throw new Error(`${filename}: "shape.tailFin.tipBandWidth" must be within 0..1, got ${tipBandWidth}`);
+    }
+  }
+
   return {
+    style,
     height: requirePositiveNumber(raw.height, "shape.tailFin.height", filename),
     length: requirePositiveNumber(raw.length, "shape.tailFin.length", filename),
-    notch,
+    ...(notch === undefined ? {} : { notch }),
+    ...(upperColor === undefined ? {} : { upperColor }),
+    ...(lowerColor === undefined ? {} : { lowerColor }),
+    ...(tipBandWidth === undefined ? {} : { tipBandWidth }),
   };
 }
 
