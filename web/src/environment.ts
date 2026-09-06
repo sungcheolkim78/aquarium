@@ -65,6 +65,85 @@ export function computeObjectCounts(
   };
 }
 
+function macroHeightField(x: number, z: number): number {
+  return Math.sin(x * 0.045) * 0.6 + Math.cos(z * 0.05) * 0.5;
+}
+
+// Deliberately different frequency/phase from macroHeightField: biome regions
+// don't just trace the height contours.
+function macroBiomeField(x: number, z: number): number {
+  return Math.sin(x * 0.031 + 1.7) * 0.5 + Math.cos(z * 0.027 - 0.9) * 0.5; // range [-1, 1]
+}
+
+type HeightTerrain = Pick<EnvironmentPreset["terrain"], "relief" | "roughness">;
+
+/** Height Map: macro field + the original 3-term detail dune formula, each independently scaled. */
+export function terrainHeight(x: number, z: number, terrain: HeightTerrain): number {
+  const detail = Math.sin(x * 0.16) * 0.55 + Math.cos(z * 0.21) * 0.45 + Math.sin((x + z) * 0.09) * 0.7;
+  return terrain.relief * macroHeightField(x, z) + terrain.roughness * detail;
+}
+
+const ANALYSIS_EPSILON = 0.5;
+
+/** Gradient magnitude via finite difference. */
+export function terrainSlope(x: number, z: number, terrain: HeightTerrain): number {
+  const h0 = terrainHeight(x, z, terrain);
+  const hx = terrainHeight(x + ANALYSIS_EPSILON, z, terrain);
+  const hz = terrainHeight(x, z + ANALYSIS_EPSILON, terrain);
+  return Math.hypot(hx - h0, hz - h0) / ANALYSIS_EPSILON;
+}
+
+/** Discrete Laplacian: negative = convex (ridge/bump), positive = concave (valley). */
+export function terrainCurvature(x: number, z: number, terrain: HeightTerrain): number {
+  const h0 = terrainHeight(x, z, terrain);
+  const sum =
+    terrainHeight(x + ANALYSIS_EPSILON, z, terrain) +
+    terrainHeight(x - ANALYSIS_EPSILON, z, terrain) +
+    terrainHeight(x, z + ANALYSIS_EPSILON, terrain) +
+    terrainHeight(x, z - ANALYSIS_EPSILON, terrain);
+  return (sum - 4 * h0) / (ANALYSIS_EPSILON * ANALYSIS_EPSILON);
+}
+
+export type Biome = "sand" | "reef" | "cliff";
+
+export function classifyBiome(x: number, z: number, terrain: EnvironmentPreset["terrain"]): Biome {
+  const slope = terrainSlope(x, z, terrain);
+  const curvature = terrainCurvature(x, z, terrain);
+  const biomeTendency = macroBiomeField(x, z);
+
+  const cliffThreshold = 0.55 - terrain.cliffBias * 0.3;
+  if (slope > cliffThreshold) return "cliff";
+
+  const convexBonus = curvature < 0 ? 0.08 : 0;
+  const reefThreshold = 0.15 - terrain.reefBias * 0.12;
+  if (slope + convexBonus > reefThreshold && biomeTendency > -terrain.reefBias) return "reef";
+
+  return "sand";
+}
+
+export interface ScatterPoint {
+  readonly position: Vector3;
+  readonly biome: Biome;
+}
+
+/** Same polar placement as today's coral clusters (radius 4.5–13, keeping the open center), now height- and biome-aware. */
+export function computeScatterPoints(
+  rng: () => number,
+  count: number,
+  terrain: EnvironmentPreset["terrain"],
+): ScatterPoint[] {
+  const points: ScatterPoint[] = [];
+  for (let c = 0; c < count; c += 1) {
+    const angle = (c / count) * Math.PI * 2 + rng() * 0.35;
+    const radius = 4.5 + rng() * 8.5;
+    const x = Math.cos(angle) * radius;
+    const z = Math.sin(angle) * radius;
+    const y = SCENE.floorY + terrainHeight(x, z, terrain);
+    points.push({ position: new Vector3(x, y, z), biome: classifyBiome(x, z, terrain) });
+  }
+  return points;
+}
+
 /** Strip a primitive down to position/normal/color, baked into world space. */
 function bake(source: BufferGeometry, matrix: Matrix4, color: Color): BufferGeometry {
   const geometry = source.index === null ? source.clone() : source.toNonIndexed();

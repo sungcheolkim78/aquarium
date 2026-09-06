@@ -6,16 +6,22 @@
 import { describe, expect, it } from "vitest";
 import { Color, Scene } from "three";
 
-import { BACKGROUND_DETAIL_PROFILES, SCENE, SEAWEED_COUNT, type EnvironmentPreset } from "./config";
+import { BACKGROUND_DETAIL_PROFILES, DEFAULT_ENVIRONMENT_PRESET, SCENE, SEAWEED_COUNT, type EnvironmentPreset } from "./config";
 import { createRng } from "./fish";
 import {
+  classifyBiome,
   computeCoralClusterCenters,
   computeObjectCounts,
+  computeScatterPoints,
   createCoral,
   createEnvironment,
   createFloor,
   createSeaweed,
   mergeBaked,
+  terrainCurvature,
+  terrainHeight,
+  terrainSlope,
+  type Biome,
 } from "./environment";
 
 function triangleCount(geometry: { getAttribute(name: string): { count: number } }): number {
@@ -34,7 +40,113 @@ const TEST_PRESET: EnvironmentPreset = {
   coral: { colors: ["#ff00ff"] },
   seaweed: { root: "#0a0a0a", tip: "#eaeaea" },
   bubbles: { tint: "#abcdef" },
+  terrain: { relief: 0.6, roughness: 0.4, reefBias: 0.55, cliffBias: 0.2, rockColor: "#7c8a8f" },
 };
+
+describe("terrainHeight/terrainSlope/terrainCurvature", () => {
+  const flat = { relief: 0, roughness: 0 };
+  const normal = { relief: 0.6, roughness: 0.4 };
+
+  it("is deterministic", () => {
+    expect(terrainHeight(3, 5, normal)).toBe(terrainHeight(3, 5, normal));
+  });
+
+  it("returns exactly 0 everywhere when relief and roughness are both 0", () => {
+    for (const [x, z] of [
+      [0, 0],
+      [5, -3],
+      [-12, 8],
+    ] as const) {
+      expect(terrainHeight(x, z, flat)).toBe(0);
+      expect(terrainSlope(x, z, flat)).toBe(0);
+      expect(terrainCurvature(x, z, flat)).toBe(0);
+    }
+  });
+
+  it("curvature is negative at a scanned local height maximum and positive at a scanned local minimum", () => {
+    // Full 2D scan (not just along one axis) — terrainCurvature's discrete
+    // Laplacian looks at neighbors in *both* x and z, so the found point must
+    // be a genuine 2D extremum, not merely a max/min along a single line.
+    const roughnessOnly = { relief: 0, roughness: 1 };
+    let maxX = 0;
+    let maxZ = 0;
+    let maxH = -Infinity;
+    let minX = 0;
+    let minZ = 0;
+    let minH = Infinity;
+    for (let x = -15; x <= 15; x += 0.25) {
+      for (let z = -15; z <= 15; z += 0.25) {
+        const h = terrainHeight(x, z, roughnessOnly);
+        if (h > maxH) {
+          maxH = h;
+          maxX = x;
+          maxZ = z;
+        }
+        if (h < minH) {
+          minH = h;
+          minX = x;
+          minZ = z;
+        }
+      }
+    }
+    expect(terrainCurvature(maxX, maxZ, roughnessOnly)).toBeLessThan(0);
+    expect(terrainCurvature(minX, minZ, roughnessOnly)).toBeGreaterThan(0);
+  });
+});
+
+describe("classifyBiome", () => {
+  const baseTerrain = { relief: 0.6, roughness: 0.4, reefBias: 0.5, cliffBias: 0.2, rockColor: "#888888" };
+
+  function countBiomes(terrain: typeof baseTerrain): Record<Biome, number> {
+    const counts: Record<Biome, number> = { sand: 0, reef: 0, cliff: 0 };
+    for (let x = -10; x <= 10; x += 1) {
+      for (let z = -10; z <= 10; z += 1) {
+        counts[classifyBiome(x, z, terrain)] += 1;
+      }
+    }
+    return counts;
+  }
+
+  it("is deterministic", () => {
+    expect(classifyBiome(4, -6, baseTerrain)).toBe(classifyBiome(4, -6, baseTerrain));
+  });
+
+  it("raising reefBias never decreases the reef share across a fixed grid", () => {
+    const low = countBiomes({ ...baseTerrain, reefBias: 0.1 });
+    const high = countBiomes({ ...baseTerrain, reefBias: 0.9 });
+    expect(high.reef).toBeGreaterThanOrEqual(low.reef);
+  });
+
+  it("raising cliffBias never decreases the cliff share across a fixed grid", () => {
+    const low = countBiomes({ ...baseTerrain, cliffBias: 0.0 });
+    const high = countBiomes({ ...baseTerrain, cliffBias: 0.9 });
+    expect(high.cliff).toBeGreaterThanOrEqual(low.cliff);
+  });
+});
+
+describe("computeScatterPoints", () => {
+  it("returns one point per requested count, deterministic for the same seed, each finite with a valid biome", () => {
+    const terrain = DEFAULT_ENVIRONMENT_PRESET.terrain;
+    const a = computeScatterPoints(createRng(3), 22, terrain);
+    const b = computeScatterPoints(createRng(3), 22, terrain);
+    expect(a).toHaveLength(22);
+    for (const point of a) {
+      expect(Number.isFinite(point.position.x)).toBe(true);
+      expect(Number.isFinite(point.position.y)).toBe(true);
+      expect(Number.isFinite(point.position.z)).toBe(true);
+      expect(["sand", "reef", "cliff"]).toContain(point.biome);
+    }
+    expect(a.map((p) => [p.position.x, p.position.y, p.position.z, p.biome])).toEqual(
+      b.map((p) => [p.position.x, p.position.y, p.position.z, p.biome]),
+    );
+  });
+
+  it("the default preset's scatter points include a mix of biomes, not just one", () => {
+    const points = computeScatterPoints(createRng(0x5eed_a17c), 60, DEFAULT_ENVIRONMENT_PRESET.terrain);
+    const biomes = new Set(points.map((p) => p.biome));
+    expect(biomes.size).toBeGreaterThan(1);
+  });
+});
 
 describe("environment preset color consumption", () => {
   it("createCoral bakes every vertex from the single supplied coral color", () => {

@@ -14,6 +14,7 @@ floor: { deep: "#112244", sand: "#ccddaa" }
 coral: { colors: ["#ff0000", "#00ff00"] }
 seaweed: { root: "#113322", tip: "#66cc88" }
 bubbles: { tint: "#ccffff" }
+terrain: { relief: 0.6, roughness: 0.4, reefBias: 0.55, cliffBias: 0.2, rockColor: "#7c8a8f" }
 `;
 
 describe("parseEnvironmentPresetYaml", () => {
@@ -44,6 +45,27 @@ describe("parseEnvironmentPresetYaml", () => {
 
   it("throws when id does not match the filename slug", () => {
     expect(() => parseEnvironmentPresetYaml(VALID_YAML, "different-name.yaml")).toThrow(/does not match/);
+  });
+
+  it("parses the terrain block", () => {
+    const preset = parseEnvironmentPresetYaml(VALID_YAML, "test-preset.yaml");
+    expect(preset.terrain).toEqual({
+      relief: 0.6,
+      roughness: 0.4,
+      reefBias: 0.55,
+      cliffBias: 0.2,
+      rockColor: "#7c8a8f",
+    });
+  });
+
+  it("throws when terrain.reefBias is outside 0..1", () => {
+    const broken = VALID_YAML.replace("reefBias: 0.55", "reefBias: 1.5");
+    expect(() => parseEnvironmentPresetYaml(broken, "test-preset.yaml")).toThrow(/terrain\.reefBias/);
+  });
+
+  it("throws when terrain.rockColor is not a valid hex color", () => {
+    const broken = VALID_YAML.replace('rockColor: "#7c8a8f"', 'rockColor: "gray"');
+    expect(() => parseEnvironmentPresetYaml(broken, "test-preset.yaml")).toThrow(/hex color/);
   });
 });
 

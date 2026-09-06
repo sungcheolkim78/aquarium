@@ -25,3 +25,9 @@ seaweed:
   tip: "#7be8a8"
 bubbles:
   tint: "#cceeff"
+terrain:
+  relief: 0.6
+  roughness: 0.4
+  reefBias: 0.55
+  cliffBias: 0.2
+  rockColor: "#7c8a8f"

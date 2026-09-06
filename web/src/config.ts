@@ -436,6 +436,13 @@ export interface EnvironmentPreset {
   readonly coral: { readonly colors: readonly string[] };
   readonly seaweed: { readonly root: string; readonly tip: string };
   readonly bubbles: { readonly tint: string };
+  readonly terrain: {
+    readonly relief: number;
+    readonly roughness: number;
+    readonly reefBias: number;
+    readonly cliffBias: number;
+    readonly rockColor: string;
+  };
 }
 
 const LOADED_ENVIRONMENT_PRESETS = loadEnvironmentPresetsFromYaml();

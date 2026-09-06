@@ -29,6 +29,18 @@ function requirePositiveNumber(value: unknown, field: string, filename: string):
   return n;
 }
 
+function requireNonNegativeNumber(value: unknown, field: string, filename: string): number {
+  const n = requireNumber(value, field, filename);
+  if (n < 0) throw new Error(`${filename}: "${field}" must be >= 0, got ${n}`);
+  return n;
+}
+
+function requireUnitNumber(value: unknown, field: string, filename: string): number {
+  const n = requireNumber(value, field, filename);
+  if (n < 0 || n > 1) throw new Error(`${filename}: "${field}" must be between 0 and 1, got ${n}`);
+  return n;
+}
+
 function requireHexColor(value: unknown, field: string, filename: string): string {
   const s = requireString(value, field, filename);
   if (!/^#[0-9a-fA-F]{6}$/.test(s)) {
@@ -105,7 +117,16 @@ export function parseEnvironmentPresetYaml(raw: string, filename: string): Envir
   const bubblesRaw = requireObject(root.bubbles, "bubbles", filename);
   const bubbles = { tint: requireHexColor(bubblesRaw.tint, "bubbles.tint", filename) };
 
-  return { id, label, description, water, lighting, caustics, godRays, floor, coral, seaweed, bubbles };
+  const terrainRaw = requireObject(root.terrain, "terrain", filename);
+  const terrain = {
+    relief: requireNonNegativeNumber(terrainRaw.relief, "terrain.relief", filename),
+    roughness: requireNonNegativeNumber(terrainRaw.roughness, "terrain.roughness", filename),
+    reefBias: requireUnitNumber(terrainRaw.reefBias, "terrain.reefBias", filename),
+    cliffBias: requireUnitNumber(terrainRaw.cliffBias, "terrain.cliffBias", filename),
+    rockColor: requireHexColor(terrainRaw.rockColor, "terrain.rockColor", filename),
+  };
+
+  return { id, label, description, water, lighting, caustics, godRays, floor, coral, seaweed, bubbles, terrain };
 }
 
 const rawFiles = import.meta.glob("/scenes/*.yaml", {
