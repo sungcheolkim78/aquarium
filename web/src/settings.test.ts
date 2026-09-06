@@ -6,7 +6,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  DEFAULT_ENVIRONMENT_PRESET_ID,
   DEFAULT_SETTINGS,
+  ENVIRONMENT_PRESETS,
   FISH_REGISTRY,
   MOOD_PRESETS,
   SETTINGS_LIMITS,
@@ -23,6 +25,7 @@ import {
   saveSettings,
   sanitizeSettings,
   withBackgroundObjectCountScale,
+  withBackgroundPreset,
   withBubblesDensityScale,
   withCameraMode,
   withCaustics,
@@ -116,6 +119,56 @@ describe("sanitizeSettings", () => {
     expect(sanitizeSettings(null)).toBeNull();
     expect(sanitizeSettings("nope")).toBeNull();
     expect(sanitizeSettings({})).toBeNull();
+  });
+});
+
+describe("sanitizeSettings for background.presetId", () => {
+  it("falls back to the default preset id when missing or unknown", () => {
+    const missing = sanitizeSettings({
+      schemaVersion: 1,
+      fish: { enabledSpecies: {}, detail: "medium", countScale: 1 },
+      background: { detail: "medium", objectCountScale: 1 },
+      lighting: { intensityScale: 1, caustics: true },
+      bubbles: { enabled: true, densityScale: 1 },
+    });
+    expect(missing?.background.presetId).toBe(DEFAULT_ENVIRONMENT_PRESET_ID);
+
+    const unknown = sanitizeSettings({
+      schemaVersion: 1,
+      fish: { enabledSpecies: {}, detail: "medium", countScale: 1 },
+      background: { detail: "medium", objectCountScale: 1, presetId: "not-a-real-preset" },
+      lighting: { intensityScale: 1, caustics: true },
+      bubbles: { enabled: true, densityScale: 1 },
+    });
+    expect(unknown?.background.presetId).toBe(DEFAULT_ENVIRONMENT_PRESET_ID);
+  });
+
+  it("round-trips a known preset id", () => {
+    const otherId = Object.keys(ENVIRONMENT_PRESETS)[0] as string;
+    const sanitized = sanitizeSettings({
+      schemaVersion: 1,
+      fish: { enabledSpecies: {}, detail: "medium", countScale: 1 },
+      background: { detail: "medium", objectCountScale: 1, presetId: otherId },
+      lighting: { intensityScale: 1, caustics: true },
+      bubbles: { enabled: true, densityScale: 1 },
+    });
+    expect(sanitized?.background.presetId).toBe(otherId);
+  });
+});
+
+describe("withBackgroundPreset", () => {
+  it("sets only background.presetId", () => {
+    const otherId = Object.keys(ENVIRONMENT_PRESETS)[0] as string;
+    const next = withBackgroundPreset(DEFAULT_SETTINGS, otherId);
+    expect(next.background.presetId).toBe(otherId);
+    expect(next.background.detail).toBe(DEFAULT_SETTINGS.background.detail);
+    expect(next.background.objectCountScale).toBe(DEFAULT_SETTINGS.background.objectCountScale);
+  });
+});
+
+describe("MAX_SETTINGS", () => {
+  it("references a valid environment preset id", () => {
+    expect(ENVIRONMENT_PRESETS[MAX_SETTINGS.background.presetId]).toBeDefined();
   });
 });
 

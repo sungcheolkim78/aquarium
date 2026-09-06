@@ -7,11 +7,12 @@
  */
 
 import type { AquariumSettings, DetailLevel, FishSpecies } from "./config";
-import { DEFAULT_SETTINGS, MOOD_PRESETS, type PresetId } from "./config";
+import { DEFAULT_SETTINGS, ENVIRONMENT_PRESETS, MOOD_PRESETS, type PresetId } from "./config";
 import {
   matchingPresetId,
   withBackgroundDetail,
   withBackgroundObjectCountScale,
+  withBackgroundPreset,
   withBubblesDensityScale,
   withBubblesEnabled,
   withCameraMode,
@@ -263,6 +264,18 @@ export function createSettingsPanel(
     ),
   );
 
+  // 배경 테마 -----------------------------------------------------------------
+  const backgroundTheme = section("배경 테마");
+  backgroundTheme.body.append(
+    radioGroup(
+      "background-preset",
+      Object.values(ENVIRONMENT_PRESETS).map((preset) => ({ value: preset.id, label: preset.label })),
+      current.background.presetId,
+      (presetId) => emit(withBackgroundPreset(current, presetId)),
+      cleanups,
+    ),
+  );
+
   // 배경 설정 (디테일) -------------------------------------------------------
   const backgroundDetail = section("배경 설정");
   backgroundDetail.body.append(
@@ -381,6 +394,7 @@ export function createSettingsPanel(
     species.section,
     fishDetail.section,
     fishCount.section,
+    backgroundTheme.section,
     backgroundDetail.section,
     backgroundCount.section,
     lighting.section,

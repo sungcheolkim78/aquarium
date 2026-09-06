@@ -7,7 +7,15 @@ import "./style.css";
 
 import { Clock, Color, PerspectiveCamera, Raycaster, Scene, Vector2, Vector3, WebGLRenderer } from "three";
 
-import { FISH_REGISTRY, SCENE, computeQualityScales, effectiveMinFps, type AquariumSettings } from "./config";
+import {
+  FISH_REGISTRY,
+  SCENE,
+  computeQualityScales,
+  effectiveMinFps,
+  resolveEnvironmentPreset,
+  type AquariumSettings,
+  type EnvironmentPreset,
+} from "./config";
 import { createEnvironment } from "./environment";
 import { createRng, createSchools, type FishSchool } from "./fish";
 import { loadObservedSpecies, saveObservedSpecies, withObserved } from "./observations";
@@ -57,7 +65,6 @@ function boot(): void {
   renderer.setSize(window.innerWidth, window.innerHeight, false);
 
   const scene = new Scene();
-  scene.background = new Color(SCENE.background);
 
   const camera = new PerspectiveCamera(
     SCENE.camera.fov,
@@ -88,6 +95,7 @@ function boot(): void {
     objectCountScale: settings.background.objectCountScale,
     lightingIntensityScale: settings.lighting.intensityScale,
     caustics: settings.lighting.caustics,
+    preset: resolveEnvironmentPreset(settings.background.presetId),
   });
   const schools = createSchools(undefined, rng, {
     detail: settings.fish.detail,
@@ -105,7 +113,11 @@ function boot(): void {
       saveObservedSpecies(observedSpecies, getLocalStorage());
     },
   });
-  const bubbles = createBubbles(rng);
+  const bubbles = createBubbles(
+    rng,
+    SCENE.bubbles.count,
+    new Color(resolveEnvironmentPreset(settings.background.presetId).bubbles.tint),
+  );
   bubbles.setEnabled(settings.bubbles.enabled);
   scene.add(bubbles.points);
 
@@ -130,8 +142,12 @@ function boot(): void {
   }, 150);
 
   const rebuildBackground = debounce(
-    (detail: AquariumSettings["background"]["detail"], objectCountScale: number): void => {
-      environment.rebuild(detail, objectCountScale);
+    (
+      detail: AquariumSettings["background"]["detail"],
+      objectCountScale: number,
+      preset: EnvironmentPreset,
+    ): void => {
+      environment.rebuild(detail, objectCountScale, preset);
     },
     150,
   );
@@ -153,9 +169,20 @@ function boot(): void {
 
       if (
         prev.background.detail !== next.background.detail ||
-        prev.background.objectCountScale !== next.background.objectCountScale
+        prev.background.objectCountScale !== next.background.objectCountScale ||
+        prev.background.presetId !== next.background.presetId
       ) {
-        rebuildBackground(next.background.detail, next.background.objectCountScale);
+        rebuildBackground(
+          next.background.detail,
+          next.background.objectCountScale,
+          resolveEnvironmentPreset(next.background.presetId),
+        );
+      }
+
+      if (prev.background.presetId !== next.background.presetId) {
+        const nextPreset = resolveEnvironmentPreset(next.background.presetId);
+        environment.setPreset(nextPreset);
+        bubbles.setTint(new Color(nextPreset.bubbles.tint));
       }
 
       if (

@@ -7,10 +7,14 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  DEFAULT_ENVIRONMENT_PRESET_ID,
+  DEFAULT_SETTINGS,
+  ENVIRONMENT_PRESETS,
   FISH_REGISTRY,
   SCENE,
   computeQualityScales,
   effectiveMinFps,
+  resolveEnvironmentPreset,
   type CreatureSpecies,
 } from "./config";
 
@@ -63,6 +67,21 @@ describe("creature registry", () => {
     for (const species of FISH_REGISTRY) {
       expect(species.description.trim().length).toBeGreaterThan(0);
     }
+  });
+});
+
+describe("environment presets", () => {
+  it("has the default preset registered", () => {
+    expect(ENVIRONMENT_PRESETS[DEFAULT_ENVIRONMENT_PRESET_ID]).toBeDefined();
+  });
+
+  it("DEFAULT_SETTINGS points at a real preset id", () => {
+    expect(DEFAULT_SETTINGS.background.presetId).toBe(DEFAULT_ENVIRONMENT_PRESET_ID);
+    expect(ENVIRONMENT_PRESETS[DEFAULT_SETTINGS.background.presetId]).toBeDefined();
+  });
+
+  it("resolveEnvironmentPreset falls back to the default for an unknown id", () => {
+    expect(resolveEnvironmentPreset("does-not-exist").id).toBe(DEFAULT_ENVIRONMENT_PRESET_ID);
   });
 });
 

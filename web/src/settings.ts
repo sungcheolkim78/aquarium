@@ -6,7 +6,9 @@
 
 import {
   BACKGROUND_DETAIL_PROFILES,
+  DEFAULT_ENVIRONMENT_PRESET_ID,
   DEFAULT_SETTINGS,
+  ENVIRONMENT_PRESETS,
   FISH_REGISTRY,
   MOOD_PRESETS,
   SETTINGS_LIMITS,
@@ -55,6 +57,10 @@ function isDetailLevel(value: unknown): value is DetailLevel {
 
 function isCameraMode(value: unknown): value is "drift" | "fixed" {
   return value === "drift" || value === "fixed";
+}
+
+function isEnvironmentPresetId(value: unknown): value is string {
+  return typeof value === "string" && value in ENVIRONMENT_PRESETS;
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -117,6 +123,9 @@ export function sanitizeSettings(
         SETTINGS_LIMITS.background.objectCountScale.max,
         DEFAULT_SETTINGS.background.objectCountScale,
       ),
+      presetId: isEnvironmentPresetId(background.presetId)
+        ? background.presetId
+        : DEFAULT_SETTINGS.background.presetId,
     },
     lighting: {
       intensityScale: clampNumber(
@@ -262,6 +271,10 @@ export function withBackgroundObjectCountScale(
   };
 }
 
+export function withBackgroundPreset(settings: AquariumSettings, presetId: string): AquariumSettings {
+  return { ...settings, background: { ...settings.background, presetId } };
+}
+
 export function withLightingIntensityScale(
   settings: AquariumSettings,
   intensityScale: number,
@@ -365,7 +378,11 @@ export const MAX_SETTINGS: AquariumSettings = {
     detail: "high",
     countScale: SETTINGS_LIMITS.fish.countScale.max,
   },
-  background: { detail: "high", objectCountScale: SETTINGS_LIMITS.background.objectCountScale.max },
+  background: {
+    detail: "high",
+    objectCountScale: SETTINGS_LIMITS.background.objectCountScale.max,
+    presetId: DEFAULT_ENVIRONMENT_PRESET_ID,
+  },
   lighting: { intensityScale: SETTINGS_LIMITS.lighting.intensityScale.max, caustics: true },
   bubbles: { enabled: true, densityScale: SETTINGS_LIMITS.bubbles.densityScale.max },
   camera: { mode: "drift" },
