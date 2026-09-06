@@ -1,0 +1,28 @@
+id: yellow-tang
+label: 노란열대어
+description: "샛노란 몸빛이 눈에 띄는 납작한 물고기예요. 한 산호 근처를 정해두고 그 주변을 잘 벗어나지 않아요."
+palette:
+  body: "#f5c11d"
+  fin: "#d19206"
+  accent: "#fff8d0"
+behavior:
+  speed: 0.7
+  locomotion: swim
+  schooling: false
+  activityRadius: 9
+  depthPreference: 0.5
+  maxTurnRate: 3.2
+  rhythmAmplitude: 0.25
+  rhythmFrequency: 0.35
+  territoryStrength: 0.35
+count: 8
+shape:
+  snout: { length: 0.13, taper: 0.75, tipRadius: 0.07 }
+  body: { length: 0.5, maxHeight: 0.44, maxWidth: 0.13, peak: 0.46, taper: 1.3, shoulderRadius: 0.8 }
+  peduncle: { length: 0.15, taper: 1.8, width: 0.11 }
+  tailFin: { height: 0.23, length: 0.24, notch: 0.25 }
+  dorsalFin: { start: 0.24, end: 0.82, height: 0.2 }
+  pelvicFin: { length: 0.1, angle: 48, at: 0.58 }
+  pectoralFin: { length: 0.12, angle: 32, at: 0.26 }
+  eye: { radius: 0.06 }
+  pattern: { stripes: 0 }

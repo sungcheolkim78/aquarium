@@ -1,0 +1,28 @@
+id: purple-tang
+label: 보라탱
+description: "보라색 몸에 샛노란 지느러미가 대비되는 물고기예요. 자기 구역의 산호를 좀처럼 벗어나지 않아요."
+palette:
+  body: "#5b4fd6"
+  fin: "#f5c11d"
+  accent: "#cfe6ff"
+behavior:
+  speed: 0.8
+  locomotion: swim
+  schooling: false
+  activityRadius: 8.5
+  depthPreference: 0.5
+  maxTurnRate: 3.2
+  rhythmAmplitude: 0.25
+  rhythmFrequency: 0.35
+  territoryStrength: 0.3
+count: 3
+shape:
+  snout: { length: 0.14, taper: 0.85, tipRadius: 0.08 }
+  body: { length: 0.7, maxHeight: 0.52, maxWidth: 0.18, peak: 0.44, taper: 1.15, shoulderRadius: 0.82 }
+  peduncle: { length: 0.15, taper: 1.7, width: 0.12 }
+  tailFin: { height: 0.3, length: 0.3, notch: 0.32 }
+  dorsalFin: { start: 0.28, end: 0.8, height: 0.19 }
+  pelvicFin: { length: 0.12, angle: 44, at: 0.56 }
+  pectoralFin: { length: 0.15, angle: 30, at: 0.26 }
+  eye: { radius: 0.058 }
+  pattern: { stripes: 0 }

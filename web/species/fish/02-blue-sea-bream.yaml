@@ -1,0 +1,27 @@
+id: blue-sea-bream
+label: 파랑참돔
+description: "푸른빛이 도는 매끈한 몸을 가진 물고기예요. 무리를 지어 넓은 수역을 여유롭게 오가요."
+palette:
+  body: "#2f7fd1"
+  fin: "#1b4f87"
+  accent: "#bfe3ff"
+behavior:
+  speed: 0.95
+  locomotion: swim
+  schooling: true
+  activityRadius: 10.5
+  depthPreference: 0.55
+  maxTurnRate: 3.2
+  rhythmAmplitude: 0.15
+  rhythmFrequency: 0.5
+count: 12
+shape:
+  snout: { length: 0.14, taper: 0.9, tipRadius: 0.08 }
+  body: { length: 0.86, maxHeight: 0.46, maxWidth: 0.2, peak: 0.4, taper: 1.0, shoulderRadius: 0.85 }
+  peduncle: { length: 0.15, taper: 1.7, width: 0.12 }
+  tailFin: { height: 0.36, length: 0.36, notch: 0.4 }
+  dorsalFin: { start: 0.3, end: 0.8, height: 0.16 }
+  pelvicFin: { length: 0.13, angle: 42, at: 0.55 }
+  pectoralFin: { length: 0.16, angle: 28, at: 0.25 }
+  eye: { radius: 0.055 }
+  pattern: { stripes: 0 }
