@@ -34,7 +34,7 @@ export interface FishDetailProfile {
 /** `high` deliberately targets ~11x today's baseline triangle count — the scene-wide triangle budget (SPEC N1) has large headroom. No facet jitter at any tier: real segment counts now carry high-detail richness. */
 export const FISH_DETAIL_PROFILES: Record<DetailLevel, FishDetailProfile> = {
   low: { bodySegments: 4, ringSides: 5, finSegments: 3 },
-  medium: { bodySegments: 8, ringSides: 7, finSegments: 4 },
+  medium: { bodySegments: 8, ringSides: 10, finSegments: 5 },
   high: { bodySegments: 16, ringSides: 10, finSegments: 7 },
 };
 
