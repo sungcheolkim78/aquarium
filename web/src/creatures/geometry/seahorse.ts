@@ -1,33 +1,13 @@
-import { BufferAttribute, BufferGeometry, Color, Vector3 } from "three";
+import { BufferGeometry, Color, Vector3 } from "three";
 
 import type { DetailLevel, FishSpecies, SeahorseShape } from "../../config";
-
-interface MeshBuffers {
-  readonly positions: number[];
-  readonly colors: number[];
-}
+import { createMeshBuffers, finalizeCreatureGeometry, pushFin, pushTriangle, type MeshBuffers } from "./base";
 
 const DETAIL_PROFILES: Record<DetailLevel, { bodySegments: number; ringSides: number; tailSegments: number }> = {
   low: { bodySegments: 4, ringSides: 4, tailSegments: 4 },
   medium: { bodySegments: 7, ringSides: 5, tailSegments: 7 },
   high: { bodySegments: 12, ringSides: 7, tailSegments: 12 },
 };
-
-function pushVertex(buffers: MeshBuffers, vertex: Vector3, color: Color): void {
-  buffers.positions.push(vertex.x, vertex.y, vertex.z);
-  buffers.colors.push(color.r, color.g, color.b);
-}
-
-function pushTriangle(buffers: MeshBuffers, a: Vector3, b: Vector3, c: Vector3, color: Color): void {
-  pushVertex(buffers, a, color);
-  pushVertex(buffers, b, color);
-  pushVertex(buffers, c, color);
-}
-
-function pushFin(buffers: MeshBuffers, a: Vector3, b: Vector3, c: Vector3, color: Color): void {
-  pushTriangle(buffers, a, b, c, color);
-  pushTriangle(buffers, a, c, b, color);
-}
 
 /** Trunk cross-section radius; `ridgeAmplitude` layers a periodic bony-plate bulge on top. */
 export function seahorseBodyRadius(t: number, ridgeAmplitude: number): number {
@@ -86,7 +66,7 @@ export function buildSeahorseGeometry(
   const fin = new Color(palette.fin);
   const accent = new Color(palette.accent);
   const profile = DETAIL_PROFILES[detail];
-  const buffers: MeshBuffers = { positions: [], colors: [] };
+  const buffers: MeshBuffers = createMeshBuffers();
   const bottom = -shape.height / 2;
 
   for (let segment = 0; segment < profile.bodySegments; segment += 1) {
@@ -168,10 +148,5 @@ export function buildSeahorseGeometry(
   const dorsalFin = seahorseDorsalFin(shape);
   pushFin(buffers, dorsalFin.root, dorsalFin.tip, dorsalFin.base, fin);
 
-  const geometry = new BufferGeometry();
-  geometry.setAttribute("position", new BufferAttribute(new Float32Array(buffers.positions), 3));
-  geometry.setAttribute("color", new BufferAttribute(new Float32Array(buffers.colors), 3));
-  geometry.computeVertexNormals();
-  geometry.computeBoundingSphere();
-  return geometry;
+  return finalizeCreatureGeometry(buffers);
 }

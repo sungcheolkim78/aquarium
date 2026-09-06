@@ -1,11 +1,7 @@
-import { BufferAttribute, BufferGeometry, Color, Vector3 } from "three";
+import { BufferGeometry, Color, Vector3 } from "three";
 
 import { FISH_DETAIL_PROFILES, type DetailLevel, type FishShape, type FishSpecies } from "../../config";
-
-interface MeshBuffers {
-  readonly positions: number[];
-  readonly colors: number[];
-}
+import { createMeshBuffers, finalizeCreatureGeometry, pushFin, pushTriangle, type MeshBuffers } from "./base";
 
 const DEFAULT_SNOUT_TIP_RADIUS = 0.08;
 const DEFAULT_SHOULDER_RADIUS = 0.82;
@@ -13,23 +9,6 @@ const DEFAULT_PEDUNCLE_WIDTH = 0.12;
 const DEFAULT_EYE_COLOR = "#141414";
 const DEFAULT_PELVIC_FIN_AT = 0.55;
 const DEFAULT_PECTORAL_FIN_AT = 0.28;
-
-function pushVertex(buffers: MeshBuffers, vertex: Vector3, color: Color): void {
-  buffers.positions.push(vertex.x, vertex.y, vertex.z);
-  buffers.colors.push(color.r, color.g, color.b);
-}
-
-function pushTriangle(buffers: MeshBuffers, a: Vector3, b: Vector3, c: Vector3, color: Color): void {
-  pushVertex(buffers, a, color);
-  pushVertex(buffers, b, color);
-  pushVertex(buffers, c, color);
-}
-
-/** Double-sided single triangle — every fin in this file is a single-layer surface with no back geometry. */
-function pushFin(buffers: MeshBuffers, a: Vector3, b: Vector3, c: Vector3, color: Color): void {
-  pushTriangle(buffers, a, b, c, color);
-  pushTriangle(buffers, a, c, b, color);
-}
 
 /** 0 at u=0, 1 at u=peak, 0 at u=1. Used only for the main-body zone's bulge. */
 function bump(u: number, peak: number, taper: number): number {
@@ -227,7 +206,7 @@ export function buildFishGeometry(
   const accentColor = new Color(palette.accent);
   const eyeColor = new Color(palette.eye ?? DEFAULT_EYE_COLOR);
   const profile = FISH_DETAIL_PROFILES[detail];
-  const buffers: MeshBuffers = { positions: [], colors: [] };
+  const buffers: MeshBuffers = createMeshBuffers();
   const half = shape.body.length / 2;
 
   const s = shape.snout.length;
@@ -313,10 +292,5 @@ export function buildFishGeometry(
     }
   }
 
-  const geometry = new BufferGeometry();
-  geometry.setAttribute("position", new BufferAttribute(new Float32Array(buffers.positions), 3));
-  geometry.setAttribute("color", new BufferAttribute(new Float32Array(buffers.colors), 3));
-  geometry.computeVertexNormals();
-  geometry.computeBoundingSphere();
-  return geometry;
+  return finalizeCreatureGeometry(buffers);
 }

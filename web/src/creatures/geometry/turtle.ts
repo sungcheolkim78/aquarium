@@ -1,33 +1,13 @@
-import { BufferAttribute, BufferGeometry, Color, Vector3 } from "three";
+import { BufferGeometry, Color, Vector3 } from "three";
 
 import type { DetailLevel, FishSpecies, TurtleShape } from "../../config";
-
-interface MeshBuffers {
-  readonly positions: number[];
-  readonly colors: number[];
-}
+import { createMeshBuffers, finalizeCreatureGeometry, pushFin, pushTriangle, type MeshBuffers } from "./base";
 
 const DETAIL_PROFILES: Record<DetailLevel, { segments: number; ringSides: number }> = {
   low: { segments: 4, ringSides: 6 },
   medium: { segments: 7, ringSides: 8 },
   high: { segments: 12, ringSides: 10 },
 };
-
-function pushVertex(buffers: MeshBuffers, vertex: Vector3, color: Color): void {
-  buffers.positions.push(vertex.x, vertex.y, vertex.z);
-  buffers.colors.push(color.r, color.g, color.b);
-}
-
-function pushTriangle(buffers: MeshBuffers, a: Vector3, b: Vector3, c: Vector3, color: Color): void {
-  pushVertex(buffers, a, color);
-  pushVertex(buffers, b, color);
-  pushVertex(buffers, c, color);
-}
-
-function pushFin(buffers: MeshBuffers, a: Vector3, b: Vector3, c: Vector3, color: Color): void {
-  pushTriangle(buffers, a, b, c, color);
-  pushTriangle(buffers, a, c, b, color);
-}
 
 function shellRadius(t: number): number {
   return Math.pow(Math.sin(Math.PI * t), 0.45);
@@ -131,7 +111,7 @@ export function buildTurtleGeometry(
   const flipper = new Color(palette.fin);
   const accent = new Color(palette.accent);
   const profile = DETAIL_PROFILES[detail];
-  const buffers: MeshBuffers = { positions: [], colors: [] };
+  const buffers: MeshBuffers = createMeshBuffers();
   const half = shape.shellLength / 2;
 
   for (let segment = 0; segment < profile.segments; segment += 1) {
@@ -190,10 +170,5 @@ export function buildTurtleGeometry(
     pushFin(buffers, rear.root, rear.tip, rear.inner, flipper);
   }
 
-  const geometry = new BufferGeometry();
-  geometry.setAttribute("position", new BufferAttribute(new Float32Array(buffers.positions), 3));
-  geometry.setAttribute("color", new BufferAttribute(new Float32Array(buffers.colors), 3));
-  geometry.computeVertexNormals();
-  geometry.computeBoundingSphere();
-  return geometry;
+  return finalizeCreatureGeometry(buffers);
 }

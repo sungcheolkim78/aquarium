@@ -1,45 +1,13 @@
-import { BufferAttribute, BufferGeometry, Color, Vector3 } from "three";
+import { BufferGeometry, Color, Vector3 } from "three";
 
 import type { DetailLevel, SharkShape, FishSpecies } from "../../config";
-
-interface MeshBuffers {
-  readonly positions: number[];
-  readonly colors: number[];
-}
+import { createMeshBuffers, finalizeCreatureGeometry, pushFin, pushTriangle, type MeshBuffers } from "./base";
 
 const DETAIL_PROFILES: Record<DetailLevel, { segments: number; ringSides: number }> = {
   low: { segments: 4, ringSides: 5 },
   medium: { segments: 6, ringSides: 6 },
   high: { segments: 12, ringSides: 8 },
 };
-
-function pushVertex(buffers: MeshBuffers, vertex: Vector3, color: Color): void {
-  buffers.positions.push(vertex.x, vertex.y, vertex.z);
-  buffers.colors.push(color.r, color.g, color.b);
-}
-
-function pushTriangle(
-  buffers: MeshBuffers,
-  a: Vector3,
-  b: Vector3,
-  c: Vector3,
-  color: Color,
-): void {
-  pushVertex(buffers, a, color);
-  pushVertex(buffers, b, color);
-  pushVertex(buffers, c, color);
-}
-
-function pushFin(
-  buffers: MeshBuffers,
-  a: Vector3,
-  b: Vector3,
-  c: Vector3,
-  color: Color,
-): void {
-  pushTriangle(buffers, a, b, c, color);
-  pushTriangle(buffers, a, c, b, color);
-}
 
 /** Nose-to-tail cross-section radius; a higher `snoutTaper` sharpens the nose into a conical point. */
 export function sharkBodyRadius(t: number, snoutTaper: number): number {
@@ -125,7 +93,7 @@ export function buildSharkGeometry(
   const fin = new Color(palette.fin);
   const accent = new Color(palette.accent);
   const profile = DETAIL_PROFILES[detail];
-  const buffers: MeshBuffers = { positions: [], colors: [] };
+  const buffers: MeshBuffers = createMeshBuffers();
   const half = shape.length / 2;
 
   for (let segment = 0; segment < profile.segments; segment += 1) {
@@ -166,9 +134,5 @@ export function buildSharkGeometry(
     pushFin(buffers, slit.a, slit.b, slit.c, accent);
   }
 
-  const geometry = new BufferGeometry();
-  geometry.setAttribute("position", new BufferAttribute(new Float32Array(buffers.positions), 3));
-  geometry.setAttribute("color", new BufferAttribute(new Float32Array(buffers.colors), 3));
-  geometry.computeVertexNormals();
-  return geometry;
+  return finalizeCreatureGeometry(buffers);
 }
