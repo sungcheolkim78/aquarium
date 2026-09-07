@@ -34,10 +34,12 @@ export function framingDistance(
   return (boundingRadius / Math.sin(halfAngleRadians)) * marginScale;
 }
 
-const PREVIEW_SIZE_PX = 120;
+const PREVIEW_SIZE_PX = 220;
 const FOV_DEGREES = 45;
-const ROTATE_RADIANS_PER_SECOND = 0.6;
+const ROTATE_RADIANS_PER_SECOND = 0.3;
 const MAX_PIXEL_RATIO = 2;
+/** Tighter than `framingDistance`'s default margin — fills more of the preview frame so the model reads clearly at a glance. */
+const PREVIEW_MARGIN_SCALE = 1.15;
 
 export interface SpeciesPreview {
   /** Swaps in a live rotating model of `species` and (re)starts the render loop. */
@@ -109,7 +111,7 @@ export function createSpeciesPreview(container: HTMLElement): SpeciesPreview {
   return {
     show(species: FishSpecies): void {
       disposeMesh();
-      geometry = buildCreatureGeometry(species, "low");
+      geometry = buildCreatureGeometry(species, "medium");
       geometry.computeBoundingSphere();
       const sphere = geometry.boundingSphere;
       material = new MeshLambertMaterial({
@@ -120,7 +122,7 @@ export function createSpeciesPreview(container: HTMLElement): SpeciesPreview {
       mesh = new Mesh(geometry, material);
       if (sphere) {
         mesh.position.copy(sphere.center).negate();
-        camera.position.set(0, 0, framingDistance(sphere.radius, FOV_DEGREES));
+        camera.position.set(0, 0, framingDistance(sphere.radius, FOV_DEGREES, PREVIEW_MARGIN_SCALE));
         camera.lookAt(0, 0, 0);
       }
       scene.add(mesh);

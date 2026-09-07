@@ -368,7 +368,7 @@ body {
   left: 50%;
   bottom: clamp(1rem, 4vh, 2rem);
   transform: translate(-50%, 12px);
-  width: min(26rem, 90vw);
+  width: min(23rem, 92vw);
   padding: 1rem 1.25rem;
   background: rgba(4, 18, 31, 0.82);
   backdrop-filter: blur(14px);
@@ -391,15 +391,16 @@ body {
 
 .species-card__content {
   display: flex;
-  gap: 0.9rem;
-  align-items: flex-start;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
 }
 
 .species-card__preview {
   flex: none;
-  width: 120px;
-  height: 120px;
-  border-radius: 0.7rem;
+  width: 220px;
+  height: 220px;
+  border-radius: 1rem;
   overflow: hidden;
   background: rgba(191, 234, 255, 0.06);
 }
@@ -411,8 +412,7 @@ body {
 }
 
 .species-card__body {
-  flex: 1;
-  min-width: 0;
+  width: 100%;
 }
 
 .species-card__header {
