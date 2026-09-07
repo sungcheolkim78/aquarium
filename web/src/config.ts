@@ -111,6 +111,8 @@ export interface FishSnoutShape {
   readonly taper: number;
   /** Radius fraction at the very tip of the nose. Defaults to 0.08. */
   readonly tipRadius?: number;
+  /** Fraction (0..1) of `body.maxHeight` the snout's local centre axis drops below the main body axis at the nose tip, easing back to 0 exactly at the snout/main-body boundary. Defaults to 0 (nose stays on the central axis). */
+  readonly dropRatio?: number;
 }
 
 export interface FishBodyShape {
@@ -166,6 +168,15 @@ export interface FishDorsalFinShape {
   readonly height: number;
 }
 
+/** A single ventral fin running along the belly's midline (배지느러미 → 꼬리, unlike the paired pelvic fins). */
+export interface FishAnalFinShape {
+  /** t-fraction (0..1) along body.length where the fin base starts. */
+  readonly start: number;
+  /** t-fraction (0..1) along body.length where the fin base ends; must be greater than `start`. */
+  readonly end: number;
+  readonly height: number;
+}
+
 export interface FishPelvicFinShape {
   readonly length: number;
   /** Degrees swept back from vertical. */
@@ -205,6 +216,7 @@ export interface FishShape {
   readonly peduncle: FishPeduncleShape;
   readonly tailFin: FishTailFinShape;
   readonly dorsalFin: FishDorsalFinShape;
+  readonly analFin: FishAnalFinShape;
   readonly pelvicFin: FishPelvicFinShape;
   readonly pectoralFin: FishPectoralFinShape;
   readonly pattern: FishPatternShape;

@@ -22,6 +22,7 @@ shape:
   peduncle: { length: 0.15, taper: 1.6 }
   tailFin: { style: fan, height: 0.2, length: 0.2, forkSpread: 0.3 }
   dorsalFin: { start: 0.2, end: 0.7, height: 0.15 }
+  analFin: { start: 0.55, end: 0.9, height: 0.08 }
   pelvicFin: { length: 0.1, angle: 40 }
   pectoralFin: { length: 0.12, angle: 30 }
   pattern: { stripes: 0 }
@@ -60,6 +61,20 @@ describe("parseFishSpeciesYaml", () => {
   it("throws naming the file when a required field is missing", () => {
     const broken = VALID_YAML.replace("count: 4", "");
     expect(() => parseFishSpeciesYaml(broken, "01-test-fish.yaml")).toThrow(/01-test-fish\.yaml/);
+  });
+
+  it("throws naming the file when the required analFin field is missing", () => {
+    const broken = VALID_YAML.replace("  analFin: { start: 0.55, end: 0.9, height: 0.08 }\n", "");
+    expect(() => parseFishSpeciesYaml(broken, "01-test-fish.yaml")).toThrow(/01-test-fish\.yaml/);
+    expect(() => parseFishSpeciesYaml(broken, "01-test-fish.yaml")).toThrow(/shape\.analFin/);
+  });
+
+  it("throws when analFin.start/end are out of order", () => {
+    const broken = VALID_YAML.replace(
+      "analFin: { start: 0.55, end: 0.9, height: 0.08 }",
+      "analFin: { start: 0.9, end: 0.55, height: 0.08 }",
+    );
+    expect(() => parseFishSpeciesYaml(broken, "01-test-fish.yaml")).toThrow(/shape\.analFin\.start/);
   });
 
   it("throws when snout.length + peduncle.length is >= 1", () => {

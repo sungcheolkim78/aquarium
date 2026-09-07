@@ -1,6 +1,7 @@
 import { parse } from "yaml";
 
 import type {
+  FishAnalFinShape,
   FishBodyShape,
   FishDorsalFinShape,
   FishPeduncleShape,
@@ -92,6 +93,7 @@ function parseSnout(raw: Record<string, unknown>, filename: string): FishSnoutSh
     length: requirePositiveNumber(raw.length, "shape.snout.length", filename),
     taper: requirePositiveNumber(raw.taper, "shape.snout.taper", filename),
     ...withOptionalNumber(raw, "tipRadius", filename, "shape.snout.tipRadius"),
+    ...withOptionalNumber(raw, "dropRatio", filename, "shape.snout.dropRatio"),
   };
 }
 
@@ -181,6 +183,17 @@ function parseDorsalFin(raw: Record<string, unknown>, filename: string): FishDor
   return { start, end, height: requirePositiveNumber(raw.height, "shape.dorsalFin.height", filename) };
 }
 
+function parseAnalFin(raw: Record<string, unknown>, filename: string): FishAnalFinShape {
+  const start = requireNumber(raw.start, "shape.analFin.start", filename);
+  const end = requireNumber(raw.end, "shape.analFin.end", filename);
+  if (start < 0 || end > 1 || end <= start) {
+    throw new Error(
+      `${filename}: "shape.analFin.start"/"end" must satisfy 0 <= start < end <= 1, got start=${start}, end=${end}`,
+    );
+  }
+  return { start, end, height: requirePositiveNumber(raw.height, "shape.analFin.height", filename) };
+}
+
 function parsePelvicFin(raw: Record<string, unknown>, filename: string): FishPelvicFinShape {
   return {
     length: requirePositiveNumber(raw.length, "shape.pelvicFin.length", filename),
@@ -210,6 +223,7 @@ function parseShape(raw: Record<string, unknown>, filename: string): FishShape {
 
   const tailFin = parseTailFin(requireObject(raw.tailFin, "shape.tailFin", filename), filename);
   const dorsalFin = parseDorsalFin(requireObject(raw.dorsalFin, "shape.dorsalFin", filename), filename);
+  const analFin = parseAnalFin(requireObject(raw.analFin, "shape.analFin", filename), filename);
   const pelvicFin = parsePelvicFin(requireObject(raw.pelvicFin, "shape.pelvicFin", filename), filename);
   const pectoralFin = parsePectoralFin(requireObject(raw.pectoralFin, "shape.pectoralFin", filename), filename);
 
@@ -243,6 +257,7 @@ function parseShape(raw: Record<string, unknown>, filename: string): FishShape {
     peduncle,
     tailFin,
     dorsalFin,
+    analFin,
     pelvicFin,
     pectoralFin,
     pattern: { stripes },

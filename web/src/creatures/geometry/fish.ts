@@ -41,11 +41,35 @@ export function fishBodyRadius(t: number, shape: FishShape): number {
   return shoulder + (1 - shoulder) * bump(u, shape.body.peak, shape.body.taper);
 }
 
-function ringVertex(x: number, radius: number, shape: FishShape, index: number, sides: number): Vector3 {
+/**
+ * Vertical axis shift (world units, <= 0 = downward) for a point at `t` within the
+ * snout zone, letting the snout/mouth sit below the main body's central axis
+ * instead of always sitting on it. Full configured drop at the nose tip (t=0),
+ * easing via smoothstep to exactly 0 at `t=snout.length` (the snout/main-body
+ * boundary), so the body loft stays continuous. 0 everywhere when `dropRatio`
+ * is omitted/0, or for any `t` at or past the snout zone.
+ */
+export function fishSnoutAxisOffset(t: number, shape: FishShape): number {
+  const s = shape.snout.length;
+  const dropRatio = shape.snout.dropRatio ?? 0;
+  if (dropRatio === 0 || s <= 0 || t >= s) return 0;
+  const v = 1 - t / s; // 1 at the nose tip, 0 at the snout/main-body boundary
+  const eased = v * v * (3 - 2 * v); // smoothstep
+  return -dropRatio * shape.body.maxHeight * eased;
+}
+
+function ringVertex(
+  x: number,
+  radius: number,
+  shape: FishShape,
+  index: number,
+  sides: number,
+  axisOffsetY = 0,
+): Vector3 {
   const angle = (index / sides) * Math.PI * 2;
   return new Vector3(
     x,
-    Math.cos(angle) * (shape.body.maxHeight / 2) * radius,
+    Math.cos(angle) * (shape.body.maxHeight / 2) * radius + axisOffsetY,
     Math.sin(angle) * (shape.body.maxWidth / 2) * radius,
   );
 }
@@ -84,6 +108,19 @@ export function fishTailFin(shape: FishShape, finSegments: number): { upper: Fis
   return { upper: buildLobe(1), lower: buildLobe(-1) };
 }
 
+/**
+ * Tail-fin thickness (world units) at fraction `u` along a lobe (0 = root, 1 =
+ * outer tip). The root thickness matches the body's own peduncle-end
+ * cross-section width (`peduncle.width * body.maxWidth`) so the fin visually
+ * continues the body instead of jumping to a flat sheet; it tapers to exactly
+ * 0 at the tip.
+ */
+export function fishTailFinThickness(u: number, shape: FishShape): number {
+  const peduncleWidth = shape.peduncle.width ?? DEFAULT_PEDUNCLE_WIDTH;
+  const rootThickness = peduncleWidth * shape.body.maxWidth;
+  return rootThickness * Math.pow(Math.max(0, 1 - u), 1.5);
+}
+
 /** `finSegments` points along the body surface between `dorsalFin.start` and `dorsalFin.end`; elevation tapers to 0 at both ends. */
 export function fishDorsalFin(
   shape: FishShape,
@@ -100,6 +137,30 @@ export function fishDorsalFin(
     const baseY = (radius * shape.body.maxHeight) / 2;
     const rise = shape.dorsalFin.height * Math.sin(Math.PI * u);
     points.push({ base: new Vector3(x, baseY, 0), top: new Vector3(x, baseY + rise, 0) });
+  }
+  return points;
+}
+
+/**
+ * `finSegments` points along the body's ventral surface between `analFin.start`
+ * and `analFin.end`; drop below the belly tapers to 0 at both ends. Mirrors
+ * `fishDorsalFin`'s construction, flipped below the body instead of above it.
+ */
+export function fishAnalFin(
+  shape: FishShape,
+  finSegments: number,
+): Array<{ base: Vector3; tip: Vector3 }> {
+  const half = shape.body.length / 2;
+  const pointCount = Math.max(2, finSegments);
+  const points: Array<{ base: Vector3; tip: Vector3 }> = [];
+  for (let i = 0; i < pointCount; i += 1) {
+    const u = i / (pointCount - 1);
+    const t = shape.analFin.start + u * (shape.analFin.end - shape.analFin.start);
+    const x = half - shape.body.length * t;
+    const radius = fishBodyRadius(t, shape);
+    const baseY = -(radius * shape.body.maxHeight) / 2;
+    const drop = shape.analFin.height * Math.sin(Math.PI * u);
+    points.push({ base: new Vector3(x, baseY, 0), tip: new Vector3(x, baseY - drop, 0) });
   }
   return points;
 }
@@ -182,18 +243,36 @@ export function fishThread(
   return points;
 }
 
-/** Low-poly octahedron approximation of a UV sphere: 6 vertices, 8 faces. */
-function octahedronFaces(center: Vector3, radius: number): ReadonlyArray<readonly [Vector3, Vector3, Vector3]> {
-  const px = new Vector3(center.x + radius, center.y, center.z);
-  const nx = new Vector3(center.x - radius, center.y, center.z);
-  const py = new Vector3(center.x, center.y + radius, center.z);
-  const ny = new Vector3(center.x, center.y - radius, center.z);
-  const pz = new Vector3(center.x, center.y, center.z + radius);
-  const nz = new Vector3(center.x, center.y, center.z - radius);
-  return [
-    [px, py, pz], [py, nx, pz], [nx, ny, pz], [ny, px, pz],
-    [py, px, nz], [nx, py, nz], [ny, nx, nz], [px, ny, nz],
-  ];
+const EYE_SIDES = 8;
+
+/**
+ * Low-poly sphere approximation: an `sides`-gon equator (in the local X-Y
+ * plane) bipyramided by two poles along the local Z axis. `sides: 4`
+ * reproduces the original octahedron (6 vertices/8 faces); a higher side
+ * count reads rounder for the same vertex budget.
+ */
+export function eyeSphereFaces(
+  center: Vector3,
+  radius: number,
+  sides: number,
+): ReadonlyArray<readonly [Vector3, Vector3, Vector3]> {
+  const outerPole = new Vector3(center.x, center.y, center.z + radius);
+  const innerPole = new Vector3(center.x, center.y, center.z - radius);
+  const equator: Vector3[] = [];
+  for (let i = 0; i < sides; i += 1) {
+    const angle = (i / sides) * Math.PI * 2;
+    equator.push(
+      new Vector3(center.x + Math.cos(angle) * radius, center.y + Math.sin(angle) * radius, center.z),
+    );
+  }
+  const faces: Array<readonly [Vector3, Vector3, Vector3]> = [];
+  for (let i = 0; i < sides; i += 1) {
+    const a = equator[i] as Vector3;
+    const b = equator[(i + 1) % sides] as Vector3;
+    faces.push([a, b, outerPole]);
+    faces.push([b, a, innerPole]);
+  }
+  return faces;
 }
 
 function resolveTailFinColor(
@@ -209,14 +288,14 @@ function resolveTailFinColor(
 
 /** `null` when the eye radius resolves to 0 — either explicitly, or (never, since the default is always positive) by omission. */
 export function fishEyePoints(shape: FishShape): { left: Vector3; right: Vector3; radius: number } | null {
-  const radius = shape.eye?.radius ?? 0.16 * shape.body.maxHeight;
+  const radius = shape.eye?.radius ?? 0.12 * shape.body.maxHeight;
   if (radius <= 0) return null;
   const t = shape.snout.length * 0.6;
   const half = shape.body.length / 2;
   const x = half - shape.body.length * t;
   const radiusFraction = fishBodyRadius(t, shape);
   const z = (radiusFraction * shape.body.maxWidth * 0.9) / 2;
-  const y = (radiusFraction * shape.body.maxHeight * 0.3) / 2;
+  const y = (radiusFraction * shape.body.maxHeight * 0.3) / 2 + fishSnoutAxisOffset(t, shape);
   return { left: new Vector3(x, y, -z), right: new Vector3(x, y, z), radius };
 }
 
@@ -262,11 +341,13 @@ export function buildFishGeometry(
     const r0 = fishBodyRadius(t0, shape);
     const r1 = fishBodyRadius(t1, shape);
     const color = stripeSegments.has(seg) ? accentColor : bodyColor;
+    const axisOffset0 = fishSnoutAxisOffset(t0, shape);
+    const axisOffset1 = fishSnoutAxisOffset(t1, shape);
     for (let side = 0; side < profile.ringSides; side += 1) {
-      const a = ringVertex(x0, r0, shape, side, profile.ringSides);
-      const b = ringVertex(x0, r0, shape, side + 1, profile.ringSides);
-      const c = ringVertex(x1, r1, shape, side + 1, profile.ringSides);
-      const d = ringVertex(x1, r1, shape, side, profile.ringSides);
+      const a = ringVertex(x0, r0, shape, side, profile.ringSides, axisOffset0);
+      const b = ringVertex(x0, r0, shape, side + 1, profile.ringSides, axisOffset0);
+      const c = ringVertex(x1, r1, shape, side + 1, profile.ringSides, axisOffset1);
+      const d = ringVertex(x1, r1, shape, side, profile.ringSides, axisOffset1);
       pushTriangle(buffers, a, c, b, color);
       pushTriangle(buffers, a, d, c, color);
     }
@@ -280,11 +361,38 @@ export function buildFishGeometry(
     [tail.lower, resolveTailFinColor(shape.tailFin.lowerColor, bodyColor, finColor, accentColor)],
   ] as const;
   for (const [lobe, lobeColor] of tailLobeColors) {
+    // Thickness tapers along the whole root-to-tip chain (root is u=0), giving
+    // the fin real volume that matches the body's own peduncle cross-section
+    // at the root instead of jumping to a flat sheet (docs: tail fin volume).
+    const denom = lobe.rim.length;
+    const chain = [lobe.root, ...lobe.rim];
+    const top = chain.map((point, j) => {
+      const thickness = fishTailFinThickness(j / denom, shape);
+      return new Vector3(point.x, point.y, thickness / 2);
+    });
+    const bottom = chain.map((point, j) => {
+      const thickness = fishTailFinThickness(j / denom, shape);
+      return new Vector3(point.x, point.y, -thickness / 2);
+    });
     for (let i = 0; i < lobe.rim.length - 1; i += 1) {
       const u = (i + 1) / (lobe.rim.length - 1);
       const color = tipBandWidth > 0 && u >= 1 - tipBandWidth ? tipColor : lobeColor;
-      pushFin(buffers, lobe.root, lobe.rim[i] as Vector3, lobe.rim[i + 1] as Vector3, color);
+      // Top and bottom surfaces reproduce the original flat fan, offset to
+      // either side; the edge band along the curved outer rim gives the
+      // trailing edge a visible, rounded thickness.
+      pushFin(buffers, top[0] as Vector3, top[i + 1] as Vector3, top[i + 2] as Vector3, color);
+      pushFin(buffers, bottom[0] as Vector3, bottom[i + 1] as Vector3, bottom[i + 2] as Vector3, color);
+      pushFin(buffers, top[i + 1] as Vector3, bottom[i + 1] as Vector3, bottom[i + 2] as Vector3, color);
+      pushFin(buffers, top[i + 1] as Vector3, bottom[i + 2] as Vector3, top[i + 2] as Vector3, color);
     }
+    // Close the root itself: without these, the root's top/bottom split (real
+    // whenever the peduncle has nonzero width) is an open slit where the fin
+    // meets the body instead of a solid wedge.
+    const lastIndex = top.length - 1;
+    pushFin(buffers, top[0] as Vector3, bottom[0] as Vector3, bottom[1] as Vector3, lobeColor);
+    pushFin(buffers, top[0] as Vector3, bottom[1] as Vector3, top[1] as Vector3, lobeColor);
+    pushFin(buffers, top[0] as Vector3, bottom[lastIndex] as Vector3, bottom[0] as Vector3, lobeColor);
+    pushFin(buffers, top[0] as Vector3, top[lastIndex] as Vector3, bottom[lastIndex] as Vector3, lobeColor);
   }
 
   const dorsal = fishDorsalFin(shape, profile.finSegments);
@@ -293,6 +401,14 @@ export function buildFishGeometry(
     const p1 = dorsal[i + 1] as { base: Vector3; top: Vector3 };
     pushFin(buffers, p0.base, p1.base, p1.top, finColor);
     pushFin(buffers, p0.base, p1.top, p0.top, finColor);
+  }
+
+  const anal = fishAnalFin(shape, profile.finSegments);
+  for (let i = 0; i < anal.length - 1; i += 1) {
+    const p0 = anal[i] as { base: Vector3; tip: Vector3 };
+    const p1 = anal[i + 1] as { base: Vector3; tip: Vector3 };
+    pushFin(buffers, p0.base, p1.base, p1.tip, finColor);
+    pushFin(buffers, p0.base, p1.tip, p0.tip, finColor);
   }
 
   for (const side of [1, -1] as const) {
@@ -318,7 +434,7 @@ export function buildFishGeometry(
   const eyes = fishEyePoints(shape);
   if (eyes) {
     for (const center of [eyes.left, eyes.right]) {
-      for (const [a, b, c] of octahedronFaces(center, eyes.radius)) {
+      for (const [a, b, c] of eyeSphereFaces(center, eyes.radius, EYE_SIDES)) {
         pushTriangle(buffers, a, b, c, eyeColor);
       }
     }

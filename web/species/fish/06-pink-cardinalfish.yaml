@@ -21,7 +21,8 @@ shape:
   peduncle: { length: 0.17, taper: 1.5, width: 0.09 }
   tailFin: { style: fork, height: 0.16, length: 0.16, forkSpread: 0.3 }
   dorsalFin: { start: 0.3, end: 0.7, height: 0.1 }
+  analFin: { start: 0.58, end: 0.83, height: 0.06 }
   pelvicFin: { length: 0.07, angle: 40, at: 0.55 }
   pectoralFin: { length: 0.09, angle: 28, at: 0.26 }
-  eye: { radius: 0.04 }
+  eye: { radius: 0.03 }
   pattern: { stripes: 0 }

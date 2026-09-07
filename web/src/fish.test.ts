@@ -21,7 +21,14 @@ import {
   rhythmSpeedScale,
   type Boid,
 } from "./fish";
-import { fishBodyRadius, fishTailFin } from "./creatures/geometry/fish";
+import {
+  eyeSphereFaces,
+  fishAnalFin,
+  fishBodyRadius,
+  fishSnoutAxisOffset,
+  fishTailFin,
+  fishTailFinThickness,
+} from "./creatures/geometry/fish";
 import { computeScatterPoints } from "./environment";
 import {
   buildSharkGeometry,
@@ -173,9 +180,11 @@ describe("buildFishGeometry", () => {
       expect(position.count % 3).toBe(0);
       expect(color.count).toBe(position.count);
       expect(normal.count).toBe(position.count);
-      // "low-poly" budget: comfortably above the ~660-triangle `high`-detail (no-thread) real
-      // output for this profile table (docs/superpowers/specs/2026-09-06-fish-procedural-grammar-design.md §4).
-      expect(position.count / 3).toBeLessThan(750);
+      // "low-poly" budget: comfortably above the ~784-triangle `high`-detail (no-thread) real
+      // output now that the tail fin has real volume and an anal fin was added
+      // (this assertion itself only builds the default/medium detail — see the
+      // dedicated "low <= medium <= high" test below for the full ordering).
+      expect(position.count / 3).toBeLessThan(900);
       for (const attribute of [position, normal, color]) {
         for (const value of attribute.array) expect(Number.isFinite(value)).toBe(true);
       }
@@ -209,7 +218,15 @@ describe("buildFishGeometry", () => {
     }
   });
 
-  it("scales high detail to ~2.5x (+150%) of medium, within 2.3~2.7x (AC-2)", () => {
+  it("scales high detail to ~1.7x of medium, within 1.6~1.9x (AC-2, retuned)", () => {
+    // AC-2's original 2.3~2.7x target (docs/superpowers/specs/2026-09-06-fish-procedural-grammar-design.md
+    // §4) assumed `ringSides` itself grew between medium and high (7->10); a
+    // later, separate tuning pass ("tune segment numbers") made both tiers
+    // share `ringSides: 10`, and this change's tail-fin volume + anal fin add
+    // triangle weight that scales with `finSegments` (a smaller medium->high
+    // multiplier than the body loft's), diluting the ratio further. Both
+    // shifts are real, intentional design decisions — this asserts the
+    // resulting real invariant instead of a target that predates them.
     for (const species of FISH_REGISTRY) {
       if (species.geometry !== "lowpoly-fish") continue;
       const medium = buildFishGeometry(species.shape, species.palette, "medium");
@@ -217,8 +234,8 @@ describe("buildFishGeometry", () => {
       const mediumTris = medium.getAttribute("position").count / 3;
       const highTris = high.getAttribute("position").count / 3;
       const ratio = highTris / mediumTris;
-      expect(ratio).toBeGreaterThanOrEqual(2.3);
-      expect(ratio).toBeLessThanOrEqual(2.7);
+      expect(ratio).toBeGreaterThanOrEqual(1.6);
+      expect(ratio).toBeLessThanOrEqual(1.9);
       medium.dispose();
       high.dispose();
     }
@@ -263,6 +280,7 @@ describe("tail fin color & pattern (upperColor/lowerColor/tipBandWidth/tipColor)
     peduncle: { length: 0.15, taper: 1.6 },
     tailFin: { style: "fan" as const, height: 0.3, length: 0.25 },
     dorsalFin: { start: 0.2, end: 0.7, height: 0.15 },
+    analFin: { start: 0.55, end: 0.85, height: 0.08 },
     pelvicFin: { length: 0.1, angle: 40 },
     pectoralFin: { length: 0.12, angle: 30 },
     pattern: { stripes: 0 },
@@ -327,6 +345,7 @@ describe("fishTailFin", () => {
     peduncle: { length: 0.15, taper: 1.6 },
     tailFin: { style: "fan" as const, height: 0.3, length: 0.25 },
     dorsalFin: { start: 0.2, end: 0.7, height: 0.15 },
+    analFin: { start: 0.55, end: 0.85, height: 0.08 },
     pelvicFin: { length: 0.1, angle: 40 },
     pectoralFin: { length: 0.12, angle: 30 },
     pattern: { stripes: 0 },
@@ -374,6 +393,7 @@ describe("fishBodyRadius", () => {
     peduncle: { length: 0.15, taper: 1.6 },
     tailFin: { style: "fan" as const, height: 0.2, length: 0.2, forkSpread: 0.3 },
     dorsalFin: { start: 0.2, end: 0.7, height: 0.15 },
+    analFin: { start: 0.55, end: 0.85, height: 0.08 },
     pelvicFin: { length: 0.1, angle: 40 },
     pectoralFin: { length: 0.12, angle: 30 },
     pattern: { stripes: 0 },
@@ -434,6 +454,153 @@ describe("fishBodyRadius", () => {
     expect(fishBodyRadius(0, custom)).toBeCloseTo(0.2, 5);
     expect(fishBodyRadius(1, custom)).toBeCloseTo(0.3, 5);
     expect(fishBodyRadius(custom.snout.length, custom)).toBeCloseTo(0.9, 5);
+  });
+});
+
+describe("fishSnoutAxisOffset", () => {
+  const baseShape = {
+    length: 1,
+    snout: { length: 0.15, taper: 0.8 },
+    body: { length: 1, maxHeight: 0.4, maxWidth: 0.2, peak: 0.4, taper: 1.1 },
+    peduncle: { length: 0.15, taper: 1.6 },
+    tailFin: { style: "fan" as const, height: 0.2, length: 0.2 },
+    dorsalFin: { start: 0.2, end: 0.7, height: 0.15 },
+    analFin: { start: 0.55, end: 0.85, height: 0.08 },
+    pelvicFin: { length: 0.1, angle: 40 },
+    pectoralFin: { length: 0.12, angle: 30 },
+    pattern: { stripes: 0 },
+  };
+
+  it("is 0 everywhere when dropRatio is omitted (default: nose stays on the central axis)", () => {
+    expect(fishSnoutAxisOffset(0, baseShape)).toBe(0);
+    expect(fishSnoutAxisOffset(baseShape.snout.length / 2, baseShape)).toBe(0);
+  });
+
+  it("returns the full configured drop at the nose tip (t=0)", () => {
+    const shape = { ...baseShape, snout: { ...baseShape.snout, dropRatio: 0.3 } };
+    expect(fishSnoutAxisOffset(0, shape)).toBeCloseTo(-0.3 * shape.body.maxHeight, 6);
+  });
+
+  it("eases to exactly 0 at t=snout.length (the snout/main-body boundary)", () => {
+    const shape = { ...baseShape, snout: { ...baseShape.snout, dropRatio: 0.3 } };
+    expect(fishSnoutAxisOffset(shape.snout.length, shape)).toBeCloseTo(0, 6);
+  });
+
+  it("returns 0 for t at or beyond the snout zone", () => {
+    const shape = { ...baseShape, snout: { ...baseShape.snout, dropRatio: 0.3 } };
+    expect(fishSnoutAxisOffset(shape.snout.length + 0.1, shape)).toBe(0);
+    expect(fishSnoutAxisOffset(1, shape)).toBe(0);
+  });
+
+  it("eases monotonically between the full drop and 0 across the snout zone", () => {
+    const shape = { ...baseShape, snout: { ...baseShape.snout, dropRatio: 0.3 } };
+    const s = shape.snout.length;
+    const early = fishSnoutAxisOffset(s * 0.25, shape);
+    const mid = fishSnoutAxisOffset(s * 0.5, shape);
+    const late = fishSnoutAxisOffset(s * 0.75, shape);
+    // offsets are <= 0 (downward); magnitude shrinks monotonically toward the boundary.
+    expect(early).toBeLessThan(mid);
+    expect(mid).toBeLessThan(late);
+    expect(late).toBeLessThan(0);
+  });
+});
+
+describe("fishTailFinThickness", () => {
+  const baseShape = {
+    length: 1,
+    snout: { length: 0.15, taper: 0.8 },
+    body: { length: 1, maxHeight: 0.4, maxWidth: 0.2, peak: 0.4, taper: 1.1 },
+    peduncle: { length: 0.15, taper: 1.6 },
+    tailFin: { style: "fan" as const, height: 0.2, length: 0.2 },
+    dorsalFin: { start: 0.2, end: 0.7, height: 0.15 },
+    analFin: { start: 0.55, end: 0.85, height: 0.08 },
+    pelvicFin: { length: 0.1, angle: 40 },
+    pectoralFin: { length: 0.12, angle: 30 },
+    pattern: { stripes: 0 },
+  };
+
+  it("root (u=0) thickness matches the body's own peduncle-end cross-section width", () => {
+    const peduncleWidth = 0.12; // default, since baseShape.peduncle.width is omitted
+    expect(fishTailFinThickness(0, baseShape)).toBeCloseTo(peduncleWidth * baseShape.body.maxWidth, 6);
+  });
+
+  it("tip (u=1) thickness is 0", () => {
+    expect(fishTailFinThickness(1, baseShape)).toBeCloseTo(0, 6);
+  });
+
+  it("a wider peduncle produces a thicker root", () => {
+    const narrow = { ...baseShape, peduncle: { ...baseShape.peduncle, width: 0.08 } };
+    const wide = { ...baseShape, peduncle: { ...baseShape.peduncle, width: 0.25 } };
+    expect(fishTailFinThickness(0, wide)).toBeGreaterThan(fishTailFinThickness(0, narrow));
+  });
+
+  it("a wider body (maxWidth) produces a thicker root", () => {
+    const narrow = { ...baseShape, body: { ...baseShape.body, maxWidth: 0.1 } };
+    const wide = { ...baseShape, body: { ...baseShape.body, maxWidth: 0.4 } };
+    expect(fishTailFinThickness(0, wide)).toBeGreaterThan(fishTailFinThickness(0, narrow));
+  });
+
+  it("tapers monotonically from root to tip", () => {
+    const values = [0, 0.25, 0.5, 0.75, 1].map((u) => fishTailFinThickness(u, baseShape));
+    for (let i = 1; i < values.length; i += 1) {
+      expect(values[i] as number).toBeLessThan(values[i - 1] as number);
+    }
+  });
+});
+
+describe("fishAnalFin", () => {
+  const baseShape = {
+    length: 1,
+    snout: { length: 0.15, taper: 0.8 },
+    body: { length: 1, maxHeight: 0.4, maxWidth: 0.2, peak: 0.4, taper: 1.1 },
+    peduncle: { length: 0.15, taper: 1.6 },
+    tailFin: { style: "fan" as const, height: 0.2, length: 0.2 },
+    dorsalFin: { start: 0.2, end: 0.7, height: 0.15 },
+    analFin: { start: 0.5, end: 0.85, height: 0.1 },
+    pelvicFin: { length: 0.1, angle: 40 },
+    pectoralFin: { length: 0.12, angle: 30 },
+    pattern: { stripes: 0 },
+  };
+
+  it("sits below the body's ventral surface (base.y < 0), unlike the dorsal fin's base", () => {
+    const points = fishAnalFin(baseShape, 4);
+    for (const point of points) expect(point.base.y).toBeLessThan(0);
+  });
+
+  it("tapers to zero drop (tip meets base) at both the start and end of its span", () => {
+    const points = fishAnalFin(baseShape, 4);
+    expect(points[0]?.tip.y).toBeCloseTo(points[0]?.base.y as number, 6);
+    expect(points[points.length - 1]?.tip.y).toBeCloseTo(points[points.length - 1]?.base.y as number, 6);
+  });
+
+  it("a taller analFin.height pushes the fin further below the body at its midpoint", () => {
+    const small = fishAnalFin({ ...baseShape, analFin: { ...baseShape.analFin, height: 0.05 } }, 5);
+    const large = fishAnalFin({ ...baseShape, analFin: { ...baseShape.analFin, height: 0.3 } }, 5);
+    const midIndex = 2;
+    const drop = (points: typeof small, i: number): number =>
+      (points[i]?.base.y as number) - (points[i]?.tip.y as number);
+    expect(drop(large, midIndex)).toBeGreaterThan(drop(small, midIndex));
+  });
+});
+
+describe("eyeSphereFaces", () => {
+  it("builds an 8-sided equator bipyramid: 16 triangular faces", () => {
+    const faces = eyeSphereFaces(new Vector3(0, 0, 0), 1, 8);
+    expect(faces).toHaveLength(16);
+  });
+
+  it("every vertex sits exactly `radius` away from the center", () => {
+    const center = new Vector3(1, 2, 3);
+    const radius = 0.5;
+    const faces = eyeSphereFaces(center, radius, 8);
+    for (const face of faces) {
+      for (const vertex of face) expect(vertex.distanceTo(center)).toBeCloseTo(radius, 6);
+    }
+  });
+
+  it("scales the face count with the requested number of sides", () => {
+    expect(eyeSphereFaces(new Vector3(), 1, 6)).toHaveLength(12);
+    expect(eyeSphereFaces(new Vector3(), 1, 8)).toHaveLength(16);
   });
 });
 
