@@ -46,3 +46,13 @@ Everything is client-side; there is no `api/` yet (planned for v2 only if server
 ## Deployment
 
 Render.com static site, root `web/`, build `npm install && npm run build`, publish `dist/`. `render.yaml` at repo root is the Blueprint (IaC) equivalent of the dashboard config, including cache headers and SPA rewrite — keep both in sync if either changes.
+
+## Agent skills
+
+### Issue tracker
+
+Issues live as GitHub Issues in `sungcheolkim78/aquarium`, using the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Domain docs
+
+Single-context layout (`CONTEXT.md` + `docs/adr/` at repo root, created lazily). See `docs/agents/domain.md`.
