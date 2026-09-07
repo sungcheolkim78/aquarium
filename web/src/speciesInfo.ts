@@ -6,6 +6,7 @@
  */
 import type { FishSpecies } from "./config";
 import { countObserved, withObserved, type ObservedSpecies } from "./observations";
+import { createSpeciesPreview } from "./speciesPreview";
 
 export interface SpeciesInfoCallbacks {
   onObserve(speciesId: string): void;
@@ -37,6 +38,17 @@ export function createSpeciesInfo(
   card.setAttribute("role", "dialog");
   card.setAttribute("aria-label", "물고기 정보");
 
+  const cardContent = document.createElement("div");
+  cardContent.className = "species-card__content";
+
+  const previewContainer = document.createElement("div");
+  previewContainer.className = "species-card__preview";
+  previewContainer.setAttribute("aria-hidden", "true");
+  const preview = createSpeciesPreview(previewContainer);
+
+  const cardBody = document.createElement("div");
+  cardBody.className = "species-card__body";
+
   const cardHeader = document.createElement("div");
   cardHeader.className = "species-card__header";
   const cardName = document.createElement("h2");
@@ -56,7 +68,10 @@ export function createSpeciesInfo(
 
   const cardDescription = document.createElement("p");
   cardDescription.className = "species-card__description";
-  card.append(cardHeader, cardDescription);
+  cardBody.append(cardHeader, cardDescription);
+
+  cardContent.append(previewContainer, cardBody);
+  card.append(cardContent);
 
   // Catalog -------------------------------------------------------------------
   const catalog = document.createElement("div");
@@ -98,6 +113,7 @@ export function createSpeciesInfo(
 
   function closeCardImpl(): void {
     card.classList.remove("is-open");
+    preview.hide();
   }
 
   function showSpeciesImpl(speciesId: string): void {
@@ -109,6 +125,7 @@ export function createSpeciesInfo(
     callbacks.onObserve(speciesId);
     refreshCatalog();
     card.classList.add("is-open");
+    preview.show(species);
   }
 
   return {
@@ -118,6 +135,7 @@ export function createSpeciesInfo(
     closeCard: closeCardImpl,
     dispose(): void {
       for (const cleanup of cleanups) cleanup();
+      preview.dispose();
       card.remove();
       catalog.remove();
     },
