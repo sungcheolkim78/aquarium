@@ -133,10 +133,10 @@ function requirePaletteKey(value: unknown, field: string, filename: string): "bo
 function parseTailFin(raw: Record<string, unknown>, filename: string): FishTailFinShape {
   const style = requireTailFinStyle(raw.style, "shape.tailFin.style", filename);
 
-  let notch: number | undefined;
-  if (raw.notch !== undefined) {
-    notch = requirePositiveNumber(raw.notch, "shape.tailFin.notch", filename);
-    if (notch >= 1) throw new Error(`${filename}: "shape.tailFin.notch" must be < 1, got ${notch}`);
+  let forkSpread: number | undefined;
+  if (raw.forkSpread !== undefined) {
+    forkSpread = requirePositiveNumber(raw.forkSpread, "shape.tailFin.forkSpread", filename);
+    if (forkSpread >= 1) throw new Error(`${filename}: "shape.tailFin.forkSpread" must be < 1, got ${forkSpread}`);
   }
 
   const upperColor =
@@ -147,6 +147,8 @@ function parseTailFin(raw: Record<string, unknown>, filename: string): FishTailF
     raw.lowerColor === undefined
       ? undefined
       : requirePaletteKey(raw.lowerColor, "shape.tailFin.lowerColor", filename);
+  const tipColor =
+    raw.tipColor === undefined ? undefined : requirePaletteKey(raw.tipColor, "shape.tailFin.tipColor", filename);
 
   let tipBandWidth: number | undefined;
   if (raw.tipBandWidth !== undefined) {
@@ -160,10 +162,11 @@ function parseTailFin(raw: Record<string, unknown>, filename: string): FishTailF
     style,
     height: requirePositiveNumber(raw.height, "shape.tailFin.height", filename),
     length: requirePositiveNumber(raw.length, "shape.tailFin.length", filename),
-    ...(notch === undefined ? {} : { notch }),
+    ...(forkSpread === undefined ? {} : { forkSpread }),
     ...(upperColor === undefined ? {} : { upperColor }),
     ...(lowerColor === undefined ? {} : { lowerColor }),
     ...(tipBandWidth === undefined ? {} : { tipBandWidth }),
+    ...(tipColor === undefined ? {} : { tipColor }),
   };
 }
 

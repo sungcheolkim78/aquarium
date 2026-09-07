@@ -139,20 +139,23 @@ export interface FishTailFinShape {
   /**
    * "fan": the upper and lower lobes share one root, forming a single continuous
    * multi-facet fin (rounded/paddle silhouette, e.g. clownfish, butterflyfish).
-   * "fork": the lobes' roots separate at the body by `notch * height`, producing a
-   * real V-gap between two distinct pointed lobes (e.g. tangs, seabream).
+   * "fork": the lobes' roots separate at the body by `forkSpread * height`, producing a
+   * real V-gap between two distinct pointed lobes (e.g. tangs, seabream). A deep
+   * `forkSpread` also stands in for a lunate silhouette rather than a third style.
    */
   readonly style: "fan" | "fork";
   readonly height: number;
   readonly length: number;
   /** 0..1 (exclusive): for "fork", how far the two lobes' roots separate, as a fraction of `height`. Defaults to 0. Ignored for "fan". */
-  readonly notch?: number;
+  readonly forkSpread?: number;
   /** Palette key painting the fin's upper lobe/half. Defaults to "fin". */
   readonly upperColor?: "body" | "fin" | "accent";
   /** Palette key painting the fin's lower lobe/half. Defaults to "fin". */
   readonly lowerColor?: "body" | "fin" | "accent";
-  /** 0..1 fraction of `length`, measured from the outer tip, painted with the accent colour as a trailing-edge band. 0/absent = no band. */
+  /** 0..1 fraction of `length`, measured from the outer tip, painted with `tipColor` as a trailing-edge band. 0/absent = no band. */
   readonly tipBandWidth?: number;
+  /** Palette key painting the trailing-edge tip band. Defaults to "accent". Ignored when `tipBandWidth` is 0/absent. */
+  readonly tipColor?: "body" | "fin" | "accent";
 }
 
 export interface FishDorsalFinShape {

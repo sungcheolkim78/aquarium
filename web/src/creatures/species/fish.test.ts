@@ -20,7 +20,7 @@ shape:
   snout: { length: 0.15, taper: 0.8 }
   body: { length: 0.5, maxHeight: 0.3, maxWidth: 0.15, peak: 0.4, taper: 1.1 }
   peduncle: { length: 0.15, taper: 1.6 }
-  tailFin: { style: fan, height: 0.2, length: 0.2, notch: 0.3 }
+  tailFin: { style: fan, height: 0.2, length: 0.2, forkSpread: 0.3 }
   dorsalFin: { start: 0.2, end: 0.7, height: 0.15 }
   pelvicFin: { length: 0.1, angle: 40 }
   pectoralFin: { length: 0.12, angle: 30 }
@@ -87,39 +87,46 @@ describe("parseFishSpeciesYaml", () => {
     expect(() => parseFishSpeciesYaml(invalid, "01-test-fish.yaml")).toThrow(/shape\.tailFin\.style/);
   });
 
-  it("defaults shape.tailFin.notch to 0 when absent, and still requires it to be < 1 when present", () => {
-    const withoutNotch = VALID_YAML.replace(", notch: 0.3", "");
-    const species = parseFishSpeciesYaml(withoutNotch, "01-test-fish.yaml");
-    expect(species.shape.tailFin.notch).toBeUndefined();
+  it("defaults shape.tailFin.forkSpread to 0 when absent, and still requires it to be < 1 when present", () => {
+    const withoutForkSpread = VALID_YAML.replace(", forkSpread: 0.3", "");
+    const species = parseFishSpeciesYaml(withoutForkSpread, "01-test-fish.yaml");
+    expect(species.shape.tailFin.forkSpread).toBeUndefined();
 
-    const tooDeep = VALID_YAML.replace("notch: 0.3", "notch: 1");
-    expect(() => parseFishSpeciesYaml(tooDeep, "01-test-fish.yaml")).toThrow(/shape\.tailFin\.notch/);
+    const tooDeep = VALID_YAML.replace("forkSpread: 0.3", "forkSpread: 1");
+    expect(() => parseFishSpeciesYaml(tooDeep, "01-test-fish.yaml")).toThrow(/shape\.tailFin\.forkSpread/);
   });
 
-  it("carries optional tailFin upperColor/lowerColor/tipBandWidth through when present", () => {
+  it("carries optional tailFin upperColor/lowerColor/tipBandWidth/tipColor through when present", () => {
     const withExtras = VALID_YAML.replace(
-      "tailFin: { style: fan, height: 0.2, length: 0.2, notch: 0.3 }",
-      "tailFin: { style: fork, height: 0.2, length: 0.2, notch: 0.3, upperColor: accent, lowerColor: body, tipBandWidth: 0.2 }",
+      "tailFin: { style: fan, height: 0.2, length: 0.2, forkSpread: 0.3 }",
+      "tailFin: { style: fork, height: 0.2, length: 0.2, forkSpread: 0.3, upperColor: accent, lowerColor: body, tipBandWidth: 0.2, tipColor: body }",
     );
     const species = parseFishSpeciesYaml(withExtras, "01-test-fish.yaml");
     expect(species.shape.tailFin.style).toBe("fork");
     expect(species.shape.tailFin.upperColor).toBe("accent");
     expect(species.shape.tailFin.lowerColor).toBe("body");
     expect(species.shape.tailFin.tipBandWidth).toBe(0.2);
+    expect(species.shape.tailFin.tipColor).toBe("body");
   });
 
-  it("throws when tailFin.upperColor/lowerColor is not body/fin/accent", () => {
+  it("throws when tailFin.upperColor/lowerColor/tipColor is not body/fin/accent", () => {
     const broken = VALID_YAML.replace(
-      "tailFin: { style: fan, height: 0.2, length: 0.2, notch: 0.3 }",
-      "tailFin: { style: fan, height: 0.2, length: 0.2, notch: 0.3, upperColor: gold }",
+      "tailFin: { style: fan, height: 0.2, length: 0.2, forkSpread: 0.3 }",
+      "tailFin: { style: fan, height: 0.2, length: 0.2, forkSpread: 0.3, upperColor: gold }",
     );
     expect(() => parseFishSpeciesYaml(broken, "01-test-fish.yaml")).toThrow(/shape\.tailFin\.upperColor/);
+
+    const brokenTip = VALID_YAML.replace(
+      "tailFin: { style: fan, height: 0.2, length: 0.2, forkSpread: 0.3 }",
+      "tailFin: { style: fan, height: 0.2, length: 0.2, forkSpread: 0.3, tipColor: gold }",
+    );
+    expect(() => parseFishSpeciesYaml(brokenTip, "01-test-fish.yaml")).toThrow(/shape\.tailFin\.tipColor/);
   });
 
   it("throws when tailFin.tipBandWidth is outside 0..1", () => {
     const broken = VALID_YAML.replace(
-      "tailFin: { style: fan, height: 0.2, length: 0.2, notch: 0.3 }",
-      "tailFin: { style: fan, height: 0.2, length: 0.2, notch: 0.3, tipBandWidth: 1.5 }",
+      "tailFin: { style: fan, height: 0.2, length: 0.2, forkSpread: 0.3 }",
+      "tailFin: { style: fan, height: 0.2, length: 0.2, forkSpread: 0.3, tipBandWidth: 1.5 }",
     );
     expect(() => parseFishSpeciesYaml(broken, "01-test-fish.yaml")).toThrow(/shape\.tailFin\.tipBandWidth/);
   });

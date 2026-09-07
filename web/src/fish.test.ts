@@ -255,7 +255,7 @@ describe("buildFishGeometry", () => {
   });
 });
 
-describe("tail fin color & pattern (upperColor/lowerColor/tipBandWidth)", () => {
+describe("tail fin color & pattern (upperColor/lowerColor/tipBandWidth/tipColor)", () => {
   const baseShape = {
     length: 1,
     snout: { length: 0.15, taper: 0.8 },
@@ -296,11 +296,26 @@ describe("tail fin color & pattern (upperColor/lowerColor/tipBandWidth)", () => 
     geometry.dispose();
   });
 
-  it("tipBandWidth paints the tail's outer tip band with the accent colour", () => {
+  it("tipBandWidth paints the tail's outer tip band with the accent colour by default", () => {
     const shape = { ...baseShape, tailFin: { ...baseShape.tailFin, tipBandWidth: 0.4 } };
     const geometry = buildFishGeometry(shape, palette);
     expect(countAccentVertices(geometry)).toBeGreaterThan(0);
     geometry.dispose();
+  });
+
+  it('tipColor: "body" paints the tip band with the body colour instead of accent', () => {
+    const withDefault = buildFishGeometry(
+      { ...baseShape, tailFin: { ...baseShape.tailFin, tipBandWidth: 0.4 } },
+      palette,
+    );
+    const withBodyTip = buildFishGeometry(
+      { ...baseShape, tailFin: { ...baseShape.tailFin, tipBandWidth: 0.4, tipColor: "body" as const } },
+      palette,
+    );
+    expect(countAccentVertices(withBodyTip)).toBe(0);
+    expect(countAccentVertices(withDefault)).toBeGreaterThan(0);
+    withDefault.dispose();
+    withBodyTip.dispose();
   });
 });
 
@@ -325,8 +340,8 @@ describe("fishTailFin", () => {
     expect(lower.root.y).toBeCloseTo(upper.root.y, 6);
   });
 
-  it("fork style: the lobes' roots separate along y by notch * height", () => {
-    const shape = { ...baseShape, tailFin: { style: "fork" as const, height: 0.3, length: 0.25, notch: 0.4 } };
+  it("fork style: the lobes' roots separate along y by forkSpread * height", () => {
+    const shape = { ...baseShape, tailFin: { style: "fork" as const, height: 0.3, length: 0.25, forkSpread: 0.4 } };
     const { upper, lower } = fishTailFin(shape, 4);
     expect(upper.root.x).toBeCloseTo(-0.5, 6);
     expect(upper.root.y).toBeCloseTo(0.4 * 0.3, 6);
@@ -334,7 +349,7 @@ describe("fishTailFin", () => {
     expect(lower.root.y).toBeCloseTo(-0.4 * 0.3, 6);
   });
 
-  it("fork style with no notch degenerates to a single shared root, same as fan", () => {
+  it("fork style with no forkSpread degenerates to a single shared root, same as fan", () => {
     const shape = { ...baseShape, tailFin: { style: "fork" as const, height: 0.3, length: 0.25 } };
     const { upper, lower } = fishTailFin(shape, 4);
     expect(upper.root.y).toBeCloseTo(0, 6);
@@ -357,7 +372,7 @@ describe("fishBodyRadius", () => {
     snout: { length: 0.15, taper: 0.8 },
     body: { length: 1, maxHeight: 0.4, maxWidth: 0.2, peak: 0.4, taper: 1.1 },
     peduncle: { length: 0.15, taper: 1.6 },
-    tailFin: { style: "fan" as const, height: 0.2, length: 0.2, notch: 0.3 },
+    tailFin: { style: "fan" as const, height: 0.2, length: 0.2, forkSpread: 0.3 },
     dorsalFin: { start: 0.2, end: 0.7, height: 0.15 },
     pelvicFin: { length: 0.1, angle: 40 },
     pectoralFin: { length: 0.12, angle: 30 },

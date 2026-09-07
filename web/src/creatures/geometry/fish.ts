@@ -59,14 +59,14 @@ export interface FishTailLobe {
 /**
  * Upper/lower tail-fin lobes. For `style: "fan"` both lobes share one root at the body
  * centreline, giving a single continuous fan (rounded/paddle silhouette). For
- * `style: "fork"` the roots separate along y by `notch * height`, so a real V-gap
- * opens between two distinct pointed lobes — deeper `notch` reaches further toward a
- * lunate fork (docs/superpowers/specs/2026-09-06-fish-tail-fin-shapes-design.md).
+ * `style: "fork"` the roots separate along y by `forkSpread * height`, so a real V-gap
+ * opens between two distinct pointed lobes — a deeper `forkSpread` reaches further
+ * toward a lunate fork.
  */
 export function fishTailFin(shape: FishShape, finSegments: number): { upper: FishTailLobe; lower: FishTailLobe } {
   const half = shape.body.length / 2;
   const segments = Math.max(2, finSegments);
-  const spread = shape.tailFin.style === "fork" ? (shape.tailFin.notch ?? 0) * shape.tailFin.height : 0;
+  const spread = shape.tailFin.style === "fork" ? (shape.tailFin.forkSpread ?? 0) * shape.tailFin.height : 0;
 
   const buildLobe = (sign: 1 | -1): FishTailLobe => {
     const root = new Vector3(-half, sign * spread, 0);
@@ -274,6 +274,7 @@ export function buildFishGeometry(
 
   const tail = fishTailFin(shape, profile.finSegments);
   const tipBandWidth = shape.tailFin.tipBandWidth ?? 0;
+  const tipColor = resolveTailFinColor(shape.tailFin.tipColor ?? "accent", bodyColor, finColor, accentColor);
   const tailLobeColors = [
     [tail.upper, resolveTailFinColor(shape.tailFin.upperColor, bodyColor, finColor, accentColor)],
     [tail.lower, resolveTailFinColor(shape.tailFin.lowerColor, bodyColor, finColor, accentColor)],
@@ -281,7 +282,7 @@ export function buildFishGeometry(
   for (const [lobe, lobeColor] of tailLobeColors) {
     for (let i = 0; i < lobe.rim.length - 1; i += 1) {
       const u = (i + 1) / (lobe.rim.length - 1);
-      const color = tipBandWidth > 0 && u >= 1 - tipBandWidth ? accentColor : lobeColor;
+      const color = tipBandWidth > 0 && u >= 1 - tipBandWidth ? tipColor : lobeColor;
       pushFin(buffers, lobe.root, lobe.rim[i] as Vector3, lobe.rim[i + 1] as Vector3, color);
     }
   }
